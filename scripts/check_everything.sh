@@ -57,6 +57,18 @@ else
 fi
 
 echo
+echo "=== paper: do the tables in the tex match the analysis? ==="
+# Added after an edit pass overwrote the probe's lag table with the judge's and
+# every existing gate stayed green: they all checked that the analysis
+# reproduced, none that the PAPER agreed with it.
+if [ -f writeup_judge.tex ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
+  run "every cell of both lag tables" \
+      python -W ignore scripts/verify_paper_tables.py --tex writeup_judge.tex
+else
+  printf '%-46s%s\n' "every cell of both lag tables" "SKIP (tex or acts missing)"
+fi
+
+echo
 echo "=== submission: is the thing you are about to upload safe? ==="
 if [ -f writeup_judge.tex ]; then
   run "anonymity scan of writeup_judge.tex" \

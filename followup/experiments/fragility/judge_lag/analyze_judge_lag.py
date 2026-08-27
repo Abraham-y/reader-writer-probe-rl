@@ -80,10 +80,16 @@ def operating_point(y: np.ndarray, sc: np.ndarray, thr: float) -> dict:
     "collapse" is largely arithmetic. An earlier version of this analysis reported
     the raw fall (-42.5%) as evidence the monitor degraded; it is not.
 
-    Two prevalence-invariant summaries instead:
-      lift = precision / base rate     -- enrichment of the flagged set
-      LR+  = TPR / FPR                 -- the likelihood ratio the threshold buys
-    Both are 1.0 for a useless monitor and are unchanged by a shift in prevalence
+    ONE of the obvious repairs actually works, and we got this wrong at first:
+
+      LR+  = TPR / FPR             -- prevalence-invariant. Report this one.
+      lift = precision / base rate -- NOT prevalence-invariant. Do not report it
+             as if it were. lift = TPR / [b*TPR + (1-b)*FPR], so it moves with the
+             base rate b at completely fixed discrimination. On this judge, holding
+             the step-0 TPR/FPR fixed and changing only b (0.544 -> 0.226) predicts
+             lift 1.37 -> 1.85 against 1.90 observed: ~92% of the apparent
+             "enrichment improvement" is the confound we set out to remove.
+    LR+ is 1.0 for a useless monitor and is unchanged by a shift in prevalence
     alone. flag_rate is kept because it needs NO labels at all.
     """
     m = sc >= thr
@@ -271,8 +277,9 @@ def main() -> None:
                      f"({100*(p9-p0)/p0:+.0f}%), but so does the base rate")
             L.append(f"  ({per[steps[0]]['true_acc']:.3f} -> {per[steps[-1]]['true_acc']:.3f}). "
                      "PREVALENCE-ADJUSTED the flagged set gets")
-            L.append(f"  MORE enriched, not less: lift {l0:.2f} -> {l9:.2f} "
-                     f"({100*(l9-l0)/l0:+.0f}%), LR+ {r0:.2f} -> {r9:.2f}.")
+            L.append(f"  Operating point holds: LR+ {r0:.2f} -> {r9:.2f} "
+                     f"({100*(r9-r0)/r0:+.0f}%). (lift {l0:.2f} -> {l9:.2f} is NOT "
+                     f"evidence -- it moves with prevalence; see operating_point().)")
             L.append("  So the precision fall is arithmetic, not evaluator failure. Do NOT")
             L.append("  report it as the judge degrading.")
             L.append("")
