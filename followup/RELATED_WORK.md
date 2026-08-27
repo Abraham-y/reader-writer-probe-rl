@@ -191,3 +191,33 @@ the idea reads as a principled import rather than an ad-hoc complaint.
 
 **Honest scale**: a workshop paper, not the ICLR submission `CLAUDE.md` targeted.
 One seed, one 0.5B model, one task.
+
+## LLM-judge citations added to writeup_judge.tex (2026-08-27)
+
+Both round-4 reviewers flagged the same gap: a submission to a workshop on LLM
+judges with zero LLM-judge references. Nine were added. **Every one was fetched
+from arxiv.org and its title, authors and quoted figures checked against the
+source before it went into the .bib** -- the reviewer that proposed most of them
+is itself an LLM, and six of the IDs postdate the assistant's knowledge cutoff,
+so they had to be treated as unverified until checked. One proposed figure
+(TPR-FPR 0.31 -> 0.09) was absent from the abstract and confirmed only in the
+full text's Table 2, where it turns out to describe a three-judge *ensemble*
+rather than a single judge; the paper's sentence was narrowed to match.
+
+| Cite key | ID | Used for |
+|---|---|---|
+| `zheng2023judging` | [2306.05685](https://arxiv.org/abs/2306.05685) | canonical LLM-as-a-judge grounding |
+| `frick2024ppe` | [2410.14872](https://arxiv.org/abs/2410.14872) | benchmark score -> downstream RLHF link needed a purpose-built benchmark |
+| `malik2025rewardbench2` | [2506.01937](https://arxiv.org/abs/2506.01937) | same; "progress in evaluation not mirrored downstream" |
+| `norman2026reliability` | [2606.19544](https://arxiv.org/abs/2606.19544) | kappa deflates 33-41pp vs exact match -- same structure as our prevalence confound |
+| `weng2026invariance` | [2605.06161](https://arxiv.org/abs/2605.06161) | accuracy-only metrics hide judge reliability gaps |
+| `yang2026auditing` | [2607.08535](https://arxiv.org/abs/2607.08535) | judge scores move when only the judge changes |
+| `zhou2026convincing` | [2607.05904](https://arxiv.org/abs/2607.05904) | **the contrast case**: optimised judge loses discrimination; our bystander judge keeps it |
+| `li2026whodrifted` | [2606.15474](https://arxiv.org/abs/2606.15474) | **concedes prior art** on the flag-rate alarm; anytime-valid e-processes are a better instrument |
+| `beigi2026prime` | [2606.09711](https://arxiv.org/abs/2606.09711) | **the mirror image of our lag**: internal probes forecast hack onset early. NB this PRIME is "Proxy Reward Internalization and Mechanistic Exploitation", NOT the implicit-reward PRIME |
+
+Two of these cost us novelty and are cited as such rather than buried:
+`li2026whodrifted` gives a better version of our one practitioner recommendation,
+and `beigi2026prime` already shows internal probes carry early warning. The
+surviving claim is narrower and should be stated narrowly: what a monitor's
+*own* health statistics do while the policy it watches degrades.
