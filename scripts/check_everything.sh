@@ -56,6 +56,13 @@ else
   printf '%-46s%s\n' "LLM judge lag (judge vs verifier)" "SKIP (scores not pulled)"
 fi
 
+if [ -d followup/results/fragility/judge_lag ]; then
+  run "judge error decomposition" \
+      python -W ignore scripts/verify_judge_errors.py --out /tmp/_je.txt
+else
+  printf '%-46s%s\n' "judge error decomposition" "SKIP (scores not pulled)"
+fi
+
 echo
 echo "=== paper: do the tables in the tex match the analysis? ==="
 # Added after an edit pass overwrote the probe's lag table with the judge's and

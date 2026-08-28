@@ -19,7 +19,7 @@ MARKDOWN YOU CAN USE
     ## Heading            -> \\section{Heading}
     **bold**              -> \\textbf{bold}
     *italic*              -> \\emph{italic}
-    {{TABLE}}             -> the verified table, spliced from the .tex
+    {{TABLE:tab:judge}}   -> that verified table, spliced from the .tex
     $x = 1$               -> passed through untouched
     \\citep{key}           -> passed through untouched
     ---                   -> converted to a comma; em dashes are the main AI tell
@@ -35,8 +35,12 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 def split_tex(tex: str):
     """Return (preamble, table_block, bibliography) -- the parts markdown never owns."""
     pre = tex[:tex.index(r"\begin{abstract}")]
-    m = re.search(r"\\begin\{table\}.*?\\end\{table\}", tex, re.S)
-    table = m.group(0) if m else ""
+    # keyed by \label so a paper can carry several; the markdown references
+    # them as {{TABLE:tab:judge}} and never contains their digits
+    table = {}
+    for m in re.finditer(r"\\begin\{table\}.*?\\end\{table\}", tex, re.S):
+        lab = re.search(r"\\label\{([^}]*)\}", m.group(0))
+        table[lab.group(1) if lab else f"_{len(table)}"] = m.group(0)
     bib = tex[tex.index(r"\begin{thebibliography}"):]
     # the slice runs to EOF and so already carries \end{document}; drop it here so
     # the rebuilder can append exactly one and repeated round trips stay stable
@@ -47,8 +51,8 @@ def split_tex(tex: str):
 def tex_to_md(tex: str) -> str:
     pre, table, bib = split_tex(tex)
     body = tex[tex.index(r"\begin{abstract}"):tex.index(r"\begin{thebibliography}")]
-    if table:
-        body = body.replace(table, "{{TABLE}}")
+    for lab, blk in table.items():
+        body = body.replace(blk, "{{TABLE:" + lab + "}}")
     body = re.sub(r"\\begin\{abstract\}(.*?)\\end\{abstract\}",
                   lambda m: "## Abstract\n\n" + m.group(1).strip(), body, flags=re.S)
     body = re.sub(r"\\section\*?\{([^}]*)\}(?:\\label\{[^}]*\})?", r"## \1\n", body)
@@ -90,10 +94,14 @@ def md_to_tex(md: str, tex: str) -> str:
             if rest.strip():
                 blocks.insert(i + 1, rest.strip())   # process the body as its own block
             continue
-        if b == "{{TABLE}}":
+        mt = re.fullmatch(r"\{\{TABLE:([^}]*)\}\}", b)
+        if mt:
             if in_abstract:
                 out.append(r"\end{abstract}"); in_abstract = False
-            out.append(table)
+            if mt.group(1) not in table:
+                sys.exit(f"unknown table marker {{{{TABLE:{mt.group(1)}}}}} -- "
+                         f"known: {sorted(table)}")
+            out.append(table[mt.group(1)])
             continue
         t = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", b)
         t = re.sub(r"(?<![*\\])\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"\\emph{\1}", t)
@@ -128,9 +136,10 @@ def main():
         sys.exit(f"{os.path.basename(md_p)} not found; run with --extract first")
     new = md_to_tex(open(md_p).read(), tex)
     # the table must survive byte-for-byte, or the gated numbers moved
-    _, table_before, _ = split_tex(tex)
-    if table_before and table_before not in new:
-        sys.exit("REFUSING TO WRITE: the verified table did not survive the rebuild")
+    _, tables_before, _ = split_tex(tex)
+    for lab, blk in tables_before.items():
+        if blk not in new:
+            sys.exit(f"REFUSING TO WRITE: verified table {lab} did not survive the rebuild")
     open(tex_p, "w").write(new)
     print(f"wrote {os.path.basename(tex_p)} from {os.path.basename(md_p)}")
     print("now run: bash scripts/check_paper.sh")
