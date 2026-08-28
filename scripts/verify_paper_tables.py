@@ -24,14 +24,31 @@ PROBE = os.path.join(ROOT, "extension/cache/steering/probe_pipeline_C_outcome_l1
 ACTS = os.path.join(ROOT, "followup/acts/phase0_harvest_runA")
 JUDGE = os.path.join(ROOT, "followup/results/fragility/judge_lag")
 STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
-TOL = {"auroc": 0.0015, "prec": 0.0015, "lr": 0.02, "flag": 0.0015}
+TOL = {"auroc": 0.0015, "prec": 0.0015, "lr": 0.02, "flag": 0.0015,
+       # CIs are re-bootstrapped at lower resolution than the published 2,000
+       # draws, so they get a Monte-Carlo tolerance rather than an exact match.
+       "flag_lo": 0.02, "flag_hi": 0.02}
+N_BOOT_CHECK = 500
 
 
-def stats(y, s, thr):
+def stats(y, s, thr, pid=None):
     p = s >= thr
     tpr, fpr = p[y == 1].mean(), p[y == 0].mean()
-    return {"auroc": roc_auc_score(y, s), "prec": y[p].mean(),
-            "lr": tpr / fpr if fpr > 0 else float("inf"), "flag": p.mean()}
+    out = {"auroc": roc_auc_score(y, s), "prec": y[p].mean(),
+           "lr": tpr / fpr if fpr > 0 else float("inf"), "flag": p.mean()}
+    if pid is not None:
+        # Prompt-clustered: resample PROMPTS. Rollouts within a prompt are
+        # correlated, so a naive per-rollout bootstrap understates the width.
+        rng = np.random.default_rng(0)
+        up = np.unique(pid)
+        idx = {q: np.where(pid == q)[0] for q in up}
+        f = p.astype(float)
+        draws = np.empty(N_BOOT_CHECK)
+        for b in range(N_BOOT_CHECK):
+            take = rng.choice(up, len(up), replace=True)
+            draws[b] = f[np.concatenate([idx[q] for q in take])].mean()
+        out["flag_lo"], out["flag_hi"] = np.percentile(draws, [2.5, 97.5])
+    return out
 
 
 def probe_series():
@@ -42,9 +59,10 @@ def probe_series():
         X = np.load(f"{ACTS}/{st}/16.npy")
         y = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")["last_block"].values.astype(int)
         s = P.predict_proba(X)[:, 1]
+        pid = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")["prompt_idx"].values
         if thr is None:
             thr = float(np.quantile(s, 0.5))
-        out[st] = stats(y, s, thr)
+        out[st] = stats(y, s, thr, pid)
     return out
 
 
@@ -54,9 +72,10 @@ def judge_series():
         d = [json.loads(l) for l in open(f"{JUDGE}/step_{st}.jsonl")]
         y = np.array([r["correct"] for r in d])
         s = np.array([r["judge_score"] for r in d])
+        pid = np.array([r["prompt_idx"] for r in d])
         if thr is None:
             thr = float(np.quantile(s, 0.5))
-        rows[st] = stats(y, s, thr)
+        rows[st] = stats(y, s, thr, pid)
     return rows
 
 
@@ -77,8 +96,11 @@ def parse(tex, which):
             continue
         cells = [re.sub(r"\\textbf\{|\}|\s", "", c) for c in m.group(2).split("&")]
         auroc = float(cells[0].split("[")[0])
+        flag, fci = cells[4].split("[")
+        flo, fhi = (float(x) for x in fci.rstrip("]").split(","))
         rows[int(m.group(1))] = {"auroc": auroc, "prec": float(cells[2]),
-                                 "lr": float(cells[3]), "flag": float(cells[4])}
+                                 "lr": float(cells[3]), "flag": float(flag),
+                                 "flag_lo": flo, "flag_hi": fhi}
     return rows, (caption.group(1)[:80] if caption else "")
 
 
@@ -95,13 +117,13 @@ def main():
         print(f"\n=== {which} table ({len(pub)} rows) ===")
         print(f"  caption: {caption[:70]}...")
         for st in sorted(pub):
-            for k in ("auroc", "prec", "lr", "flag"):
+            for k in ("auroc", "prec", "lr", "flag", "flag_lo", "flag_hi"):
                 p, r = pub[st][k], real[st][k]
                 if abs(p - r) > TOL[k]:
                     print(f"  MISMATCH step {st:>3} {k:>5}: paper {p} vs recomputed {r:.4f}")
                     bad += 1
         if not bad:
-            print(f"  all {4*len(pub)} cells match recomputation")
+            print(f"  all {6*len(pub)} cells match recomputation")
 
     # the swap check: the two tables must not be the same numbers
     pp, _ = parse(tex, "probe"); jj, _ = parse(tex, "judge")

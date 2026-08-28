@@ -263,6 +263,40 @@ def main() -> None:
              "That is the flat window, tested rather than eyeballed.")
     L.append("")
 
+    # --- PAIRED tests on the FLAG RATE. This is the paper's one label-free
+    # recommendation, and until now it was the only statistic here quoted
+    # without an interval -- which is exactly backwards, since it is the one a
+    # practitioner would actually act on. Same estimator as the AUROC block:
+    # resample prompts once, apply the same draw to both checkpoints.
+    L.append("  PAIRED flag-rate differences vs step "
+             f"{used[0]} (prompt-clustered):")
+    L.append("")
+    L.append(f"    {'contrast':<26}{'delta':>9}{'95% CI':>22}{'p':>9}")
+    L.append("    " + "-" * 66)
+    rng3 = np.random.default_rng(args.seed)
+    flag_paired = {}
+    for t in used[1:]:
+        d = np.empty(args.n_boot)
+        for i in range(args.n_boot):
+            dr = rng3.choice(prompts, size=len(prompts), replace=True)
+            ia = np.concatenate([idx[used[0]][q] for q in dr])
+            ib = np.concatenate([idx[t][q] for q in dr])
+            d[i] = (data[t][0][ib] >= thr).mean() - (data[used[0]][0][ia] >= thr).mean()
+        lo_, hi_ = np.percentile(d, [2.5, 97.5])
+        p_ = max(2 * min((d < 0).mean(), (d > 0).mean()), 1.0 / args.n_boot)
+        L.append(f"    step {used[0]} -> step {t:<14}{d.mean():>+9.4f}   "
+                 f"[{lo_:+.4f},{hi_:+.4f}]{p_:>9.3f}{'  *' if p_ < 0.05 else ''}")
+        flag_paired[str(t)] = {"delta": float(d.mean()), "ci_lo": float(lo_),
+                               "ci_hi": float(hi_), "p": float(p_)}
+    first_sig = next((t for t in used[1:] if flag_paired[str(t)]["p"] < 0.05), None)
+    L.append("")
+    L.append(f"  Flag rate departs significantly at step {first_sig}, against an "
+             f"AUROC break at {DROP_AT}: a label-free lead of ~{DROP_AT - first_sig} "
+             "steps. NOTE this establishes that the statistic MOVED, not that it "
+             "moved more than benign training moves it -- that needs the control "
+             "below, which is weak.")
+    L.append("")
+
     k_hat = best_changepoint(point)
     L.append(f"  point estimate: break after step {used[k_hat - 1]} "
              f"(between {used[k_hat - 1]} and {used[k_hat]})")
@@ -342,6 +376,7 @@ def main() -> None:
         json.dump({"run": args.run, "layer": args.layer, "steps": used,
                    "n_boot": args.n_boot, "per_step": per,
                    "paired_auroc_diffs": paired_out,
+                   "paired_flag_diffs": flag_paired,
                    "changepoint_point_estimate": int(used[k_hat - 1]),
                    "changepoint_modal": int(modal),
                    "changepoint_modal_share": float(kdist.max() / total),

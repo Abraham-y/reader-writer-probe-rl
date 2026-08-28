@@ -219,6 +219,42 @@ def main() -> None:
         paired_out[f"{a}-{b}"] = {"delta": m_, "ci_lo": lo_, "ci_hi": hi_, "p": p_}
     out_paired = paired_out
     L.append("")
+    L.append("  NOTE on the (30, 80) contrast: steps 30 and 80 are the argmin and")
+    L.append("  argmax of the OBSERVED series, so that contrast is selected on the")
+    L.append("  data and its nominal p-value is optimistic. It is reported as")
+    L.append("  exploratory. Of the step-0 contrasts, only step 30 survives a")
+    L.append("  Bonferroni correction over the 10 tests tabulated.")
+    L.append("")
+
+    # --- PAIRED tests on the FLAG RATE, the one label-free statistic. It was
+    # the only number in the paper quoted without an interval, which is
+    # backwards: it is the one a practitioner acts on.
+    L.append("  PAIRED flag-rate differences vs step "
+             f"{steps[0]} (prompt-clustered):")
+    L.append("")
+    L.append(f"    {'contrast':<26}{'delta':>9}{'95% CI':>22}{'p':>9}")
+    L.append("    " + "-" * 66)
+    rng3 = np.random.default_rng(args.seed)
+    flag_paired = {}
+    for t in steps[1:]:
+        d = np.empty(args.n_boot)
+        for i in range(args.n_boot):
+            dr = rng3.choice(prompts, size=len(prompts), replace=True)
+            ia = np.concatenate([idx[steps[0]][q] for q in dr])
+            ib = np.concatenate([idx[t][q] for q in dr])
+            d[i] = (data[t]["s"][ib] >= thr).mean() - (data[steps[0]]["s"][ia] >= thr).mean()
+        lo_, hi_ = np.percentile(d, [2.5, 97.5])
+        p_ = max(2 * min((d < 0).mean(), (d > 0).mean()), 1.0 / args.n_boot)
+        L.append(f"    step {steps[0]} -> step {t:<14}{d.mean():>+9.4f}   "
+                 f"[{lo_:+.4f},{hi_:+.4f}]{p_:>9.3f}{'  *' if p_ < 0.05 else ''}")
+        flag_paired[str(t)] = {"delta": float(d.mean()), "ci_lo": float(lo_),
+                               "ci_hi": float(hi_), "p": float(p_)}
+    fs = next((t for t in steps[1:] if flag_paired[str(t)]["p"] < 0.05), None)
+    L.append("")
+    L.append(f"  Judge flag rate departs significantly at step {fs}, and in the "
+             "OPPOSITE direction to the probe's. What to watch is departure from "
+             "the frozen operating point, not a direction.")
+    L.append("")
     sig_down = [k for k, v in paired_out.items() if v["p"] < 0.05 and v["delta"] > 0]
     sig_up = [k for k, v in paired_out.items() if v["p"] < 0.05 and v["delta"] < 0]
     if sig_down:
