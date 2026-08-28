@@ -51,8 +51,19 @@ extension/outputs/n500/probe_behavioral_1.5b/
 # Personal/local Claude Code settings
 .claude/
 
-# === Paper artifacts (kept private; never push) ===
+# === Paper artifacts (kept private; NEVER PUSH) ===
+# The paper sources are tracked so the submissions are backed up, but this
+# repo's remote is github.com/Abraham-y/... -- the owner name is an author
+# name -- and writeup_workshop{,_full}.tex carry both real names. Pushing
+# these while JUDGe review is open breaks the double-blind: a reviewer who
+# finds the repo sees a named version of the anonymised submission.
+# Keep them local until decisions are out.
 *.tex
+!writeup_judge.tex
+!writeup_judge_short.tex
+!writeup_judge_spotlight.tex
+!writeup_workshop.tex
+!writeup_workshop_full.tex
 *.pdf
 *.aux
 *.bbl
