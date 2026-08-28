@@ -134,12 +134,20 @@ def main():
 
     if not os.path.exists(md_p):
         sys.exit(f"{os.path.basename(md_p)} not found; run with --extract first")
-    new = md_to_tex(open(md_p).read(), tex)
+    md_src = open(md_p).read()
+    new = md_to_tex(md_src, tex)
     # the table must survive byte-for-byte, or the gated numbers moved
+    # A table may legitimately be dropped by deleting its marker. What must never
+    # happen is a table surviving in ALTERED form, which would mean its gated
+    # numbers were edited. So: referenced tables must appear byte-identical;
+    # unreferenced ones are reported as deliberate removals.
     _, tables_before, _ = split_tex(tex)
     for lab, blk in tables_before.items():
-        if blk not in new:
-            sys.exit(f"REFUSING TO WRITE: verified table {lab} did not survive the rebuild")
+        referenced = ("{{TABLE:" + lab + "}}") in md_src
+        if referenced and blk not in new:
+            sys.exit(f"REFUSING TO WRITE: verified table {lab} was altered by the rebuild")
+        if not referenced:
+            print(f"note: table {lab} is no longer referenced and has been dropped")
     open(tex_p, "w").write(new)
     print(f"wrote {os.path.basename(tex_p)} from {os.path.basename(md_p)}")
     print("now run: bash scripts/check_paper.sh")

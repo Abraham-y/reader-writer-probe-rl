@@ -31,10 +31,19 @@ import re, subprocess, sys
 tex, limit = sys.argv[1], int(sys.argv[2])
 pages = subprocess.run(["pdftotext", tex + ".pdf", "-"],
                        capture_output=True, text=True).stdout.split("\f")
-over = pages[limit] if len(pages) > limit else ""
-body = over[:over.index("References")] if "References" in over else over
-spill = [l for l in body.splitlines()
-         if l.strip() and not re.fullmatch(r"[\d\s]+", l.strip())]
+# Body runs until the References heading, wherever that falls. It may begin
+# partway down a page and the bibliography may then run past the limit, which
+# is fine: the limit applies to body pages only. The earlier version of this
+# check assumed references always started AFTER the limit and reported a false
+# overflow when they did not.
+ref_page = next((i for i, pg in enumerate(pages) if "References" in pg), len(pages) - 1)
+if ref_page < limit:
+    spill = []
+else:
+    over = pages[limit] if len(pages) > limit else ""
+    body = over[:over.index("References")] if "References" in over else over
+    spill = [l for l in body.splitlines()
+             if l.strip() and not re.fullmatch(r"[\d\s]+", l.strip())]
 
 src = open(tex + ".tex").read()
 prose = src[src.index(r"\begin{abstract}"):src.index(r"\begin{thebibliography}")]
@@ -45,7 +54,7 @@ if spill:
     print(f"  PAGE LIMIT     OVER by {len(spill)} lines on p{limit+1}")
     print(f"                 first spilled: {' '.join(spill[0].split())[:70]}...")
 else:
-    print(f"  page limit     OK (body fits {limit}pp)")
+    print(f"  page limit     OK (body ends p{ref_page+1}, limit {limit}pp)")
 
 warn = len(re.findall(r"Overfull|Undefined", log))
 print(f"  latex warnings {'OK' if warn==0 else str(warn)+'  <-- check /tmp/_cp.log'}")

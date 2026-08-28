@@ -106,6 +106,51 @@ def parse(tex, which):
     return rows, (caption.group(1)[:80] if caption else "")
 
 
+def error_table(tex):
+    """Verify the judge error-decomposition table (tab:errors) if the tex carries it.
+
+    Recomputed with the same bucketing as verify_judge_errors.py, which is
+    imported rather than reimplemented so the two can never drift apart."""
+    m = re.search(r"what the model produced.*?\\bottomrule", tex, re.S)
+    if not m:
+        return None
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from verify_judge_errors import bucket, SCORES as JS
+
+    rows0 = [json.loads(l) for l in open(f"{JS}/step_0.jsonl")]
+    thr = float(np.quantile([r["judge_score"] for r in rows0], 0.5))
+    real = {}
+    for st in (0, 50, 99):
+        rows = [json.loads(l) for l in open(f"{JS}/step_{st}.jsonl")]
+        n = len(rows)
+        for b in ("CORRECT", "valid form, wrong value", "wrong numbers used"):
+            sel = [r for r in rows if bucket(r) == b]
+            real[(b, st, "share")] = len(sel) / n
+            real[(b, st, "pass")] = sum(r["judge_score"] >= thr for r in sel) / len(sel)
+
+    label_of = {"correct": "CORRECT",
+                "legalequation,wrongvalue": "valid form, wrong value",
+                "usesnumbersitwasnotgiven": "wrong numbers used"}
+    bad = 0
+    for line in m.group(0).split("\n"):
+        if "&" not in line or "\\midrule" in line or "what the model" in line:
+            continue
+        cells = [re.sub(r"\\textbf\{|\}|\s", "", c) for c in line.split("&")]
+        key = label_of.get(cells[0].lower().replace(" ", ""))
+        if key is None or len(cells) < 7:
+            continue
+        vals = [float(c.replace("\\\\", "").strip()) for c in cells[1:7]]
+        for k, (st, kind) in enumerate([(0, "share"), (50, "share"), (99, "share"),
+                                        (0, "pass"), (50, "pass"), (99, "pass")]):
+            if abs(vals[k] - real[(key, st, kind)]) > 0.002:
+                print(f"  MISMATCH {key} step {st} {kind}: "
+                      f"paper {vals[k]} vs recomputed {real[(key, st, kind)]:.4f}")
+                bad += 1
+    print(f"  error table: all 18 cells match recomputation" if not bad
+          else f"  error table: {bad} disagreements")
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tex", default=os.path.join(ROOT, "writeup_judge.tex"))
@@ -137,8 +182,12 @@ def main():
     if pp and jj and all(abs(pp[s]["auroc"] - jj[s]["auroc"]) < 1e-9 for s in pp):
         print("\n  FAIL: the two tables are identical -- a table was overwritten")
         bad += 1
+    et = error_table(tex)
+    if et is not None:
+        seen += 1
+        bad += et
     if seen == 0:
-        print("\n  FAIL: no lag table found in this tex at all")
+        print("\n  FAIL: no verifiable table found in this tex at all")
         bad += 1
 
     print("\nAll table cells verified." if not bad else f"\n{bad} DISAGREEMENTS.")

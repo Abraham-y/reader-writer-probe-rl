@@ -71,7 +71,7 @@ echo "=== paper: do the tables in the tex match the analysis? ==="
 # Three cuts of the same paper for the three JUDGe tracks: 6pp full, 4pp short,
 # 2pp junior spotlight. Every one of them gets checked -- a number corrected in
 # one cut and missed in another is exactly the drift these gates exist to catch.
-for tex in writeup_judge writeup_judge_short writeup_judge_spotlight; do
+for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper; do
   if [ -f "$tex.tex" ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
     run "lag tables: $tex" \
         python -W ignore scripts/verify_paper_tables.py --tex "$tex.tex"
@@ -82,7 +82,7 @@ done
 
 echo
 echo "=== submission: is the thing you are about to upload safe? ==="
-for tex in writeup_judge writeup_judge_short writeup_judge_spotlight; do
+for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper; do
   if [ -f "$tex.tex" ]; then
     run "anonymity scan: $tex" \
         python scripts/make_submission_tex.py --check "$tex.tex"
