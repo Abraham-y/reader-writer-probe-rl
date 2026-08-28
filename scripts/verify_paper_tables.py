@@ -85,7 +85,9 @@ def parse(tex, which):
     hdr = re.search(r"RLOO step & \\textbf\{" + which + r" AUROC\}.*?\\bottomrule",
                     tex, re.S)
     if not hdr:
-        sys.exit(f"FAIL: no table with a '{which} AUROC' header in the tex")
+        # Legitimately absent in the cut-down versions (the 2pp spotlight
+        # carries only the judge table). Absence is fine; a WRONG table is not.
+        return None, None
     body = hdr.group(0)
     cap = tex[hdr.end():hdr.end() + 700]
     caption = re.search(r"\\caption\{(.*?)\}\s*(?:\\label|\n\\end\{table\})", cap, re.S)
@@ -111,8 +113,13 @@ def main():
     tex = open(a.tex).read()
 
     bad = 0
+    seen = 0
     for which, truth in (("probe", probe_series), ("judge", judge_series)):
         pub, caption = parse(tex, which)
+        if pub is None:
+            print(f"\n=== {which} table: absent from this tex (skipped) ===")
+            continue
+        seen += 1
         real = truth()
         print(f"\n=== {which} table ({len(pub)} rows) ===")
         print(f"  caption: {caption[:70]}...")
@@ -125,10 +132,13 @@ def main():
         if not bad:
             print(f"  all {6*len(pub)} cells match recomputation")
 
-    # the swap check: the two tables must not be the same numbers
+    # the swap check: where both are present they must not be the same numbers
     pp, _ = parse(tex, "probe"); jj, _ = parse(tex, "judge")
-    if all(abs(pp[s]["auroc"] - jj[s]["auroc"]) < 1e-9 for s in pp):
+    if pp and jj and all(abs(pp[s]["auroc"] - jj[s]["auroc"]) < 1e-9 for s in pp):
         print("\n  FAIL: the two tables are identical -- a table was overwritten")
+        bad += 1
+    if seen == 0:
+        print("\n  FAIL: no lag table found in this tex at all")
         bad += 1
 
     print("\nAll table cells verified." if not bad else f"\n{bad} DISAGREEMENTS.")

@@ -61,21 +61,28 @@ echo "=== paper: do the tables in the tex match the analysis? ==="
 # Added after an edit pass overwrote the probe's lag table with the judge's and
 # every existing gate stayed green: they all checked that the analysis
 # reproduced, none that the PAPER agreed with it.
-if [ -f writeup_judge.tex ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
-  run "every cell of both lag tables" \
-      python -W ignore scripts/verify_paper_tables.py --tex writeup_judge.tex
-else
-  printf '%-46s%s\n' "every cell of both lag tables" "SKIP (tex or acts missing)"
-fi
+# Three cuts of the same paper for the three JUDGe tracks: 6pp full, 4pp short,
+# 2pp junior spotlight. Every one of them gets checked -- a number corrected in
+# one cut and missed in another is exactly the drift these gates exist to catch.
+for tex in writeup_judge writeup_judge_short writeup_judge_spotlight; do
+  if [ -f "$tex.tex" ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
+    run "lag tables: $tex" \
+        python -W ignore scripts/verify_paper_tables.py --tex "$tex.tex"
+  else
+    printf '%-46s%s\n' "lag tables: $tex" "SKIP (tex or acts missing)"
+  fi
+done
 
 echo
 echo "=== submission: is the thing you are about to upload safe? ==="
-if [ -f writeup_judge.tex ]; then
-  run "anonymity scan of writeup_judge.tex" \
-      python scripts/make_submission_tex.py --check writeup_judge.tex
-else
-  printf '%-46s%s\n' "anonymity scan of writeup_judge.tex" "SKIP (not built)"
-fi
+for tex in writeup_judge writeup_judge_short writeup_judge_spotlight; do
+  if [ -f "$tex.tex" ]; then
+    run "anonymity scan: $tex" \
+        python scripts/make_submission_tex.py --check "$tex.tex"
+  else
+    printf '%-46s%s\n' "anonymity scan: $tex" "SKIP (not built)"
+  fi
+done
 
 echo
 if [ "$fail" -eq 0 ]; then
