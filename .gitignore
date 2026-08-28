@@ -64,6 +64,7 @@ extension/outputs/n500/probe_behavioral_1.5b/
 !writeup_judge_spotlight.tex
 !writeup_workshop.tex
 !writeup_workshop_full.tex
+!writeup_judge_spotlight.md
 *.pdf
 *.aux
 *.bbl
