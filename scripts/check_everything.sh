@@ -80,6 +80,17 @@ for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_jud
   fi
 done
 
+# Table cells were gated long before prose numbers were, and the 2pp rewrite
+# retyped ~20 figures into sentences where nothing checked them. This closes it.
+for tex in writeup_judge_spotlight writeup_judge_shortpaper; do
+  if [ -f "$tex.tex" ] && [ -d followup/results/fragility/judge_lag ]; then
+    run "prose numbers: $tex" \
+        python -W ignore scripts/verify_prose_numbers.py --tex "$tex.tex"
+  else
+    printf '%-46s%s\n' "prose numbers: $tex" "SKIP (tex or scores missing)"
+  fi
+done
+
 echo
 echo "=== submission: is the thing you are about to upload safe? ==="
 for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper; do
