@@ -37,7 +37,12 @@ pages = subprocess.run(["pdftotext", tex + ".pdf", "-"],
 # check assumed references always started AFTER the limit and reported a false
 # overflow when they did not.
 ref_page = next((i for i, pg in enumerate(pages) if "References" in pg), len(pages) - 1)
-if ref_page < limit:
+# Body may end BEFORE the references page if References start at its very top.
+_head = pages[ref_page][:pages[ref_page].index("References")] if ref_page < len(pages) else ""
+_has_body = bool([l for l in _head.splitlines()
+                  if l.strip() and not re.fullmatch(r"[\d\s]+", l.strip())])
+body_end = ref_page + 1 if _has_body else ref_page
+if body_end <= limit:
     spill = []
 else:
     over = pages[limit] if len(pages) > limit else ""
@@ -54,7 +59,7 @@ if spill:
     print(f"  PAGE LIMIT     OVER by {len(spill)} lines on p{limit+1}")
     print(f"                 first spilled: {' '.join(spill[0].split())[:70]}...")
 else:
-    print(f"  page limit     OK (body ends p{ref_page+1}, limit {limit}pp)")
+    print(f"  page limit     OK (body ends p{body_end}, limit {limit}pp)")
 
 warn = len(re.findall(r"Overfull|Undefined", log))
 print(f"  latex warnings {'OK' if warn==0 else str(warn)+'  <-- check /tmp/_cp.log'}")
