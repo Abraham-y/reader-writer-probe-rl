@@ -105,10 +105,37 @@ def main() -> None:
     ill0, ill9 = 100 * _ill(0), 100 * _ill(99)
     prec_drop = 100 * (y0[p0].mean() - y9[p9].mean()) / y0[p0].mean()
 
+    # --- format shift: the mechanism the corrected section rests on ----------
+    import re as _re
+    _canon = lambda e: _re.sub(r"[()\\s]", "", e or "")
+    _key = {}
+    for _st in (0, 99):
+        for _r in D[_st]:
+            if _r["equation"]:
+                _key.setdefault((_r["prompt_idx"], _r["equation"]), []).append(_r["judge_score"])
+    _rep = [v for v in _key.values() if len(v) > 1]
+    n_repeat = len(_rep)
+    n_straddle = sum(1 for v in _rep if (max(v) >= thr) != (min(v) >= thr))
+    def _noparen(st):
+        c = [r for r in D[st] if r["correct"] == 1]
+        return sum(1 for r in c if "(" not in (r["equation"] or "")) / len(c)
+    noparen0, noparen99 = _noparen(0), _noparen(99)
+    _g = {}
+    for _st in (0, 99):
+        for _r in D[_st]:
+            if _r["correct"] == 1 and _r["equation"]:
+                k = (_r["prompt_idx"], _canon(_r["equation"]))
+                _g.setdefault(k, {"p": [], "n": []})
+                _g[k]["p" if "(" in _r["equation"] else "n"].append(_r["judge_score"] >= thr)
+    _pairs = [(np.mean(g["p"]), np.mean(g["n"])) for g in _g.values() if g["p"] and g["n"]]
+    paren_yes = np.mean([a for a, _ in _pairs])
+    paren_no = np.mean([b for _, b in _pairs])
+
     # Some claims live only in the longer cut. Each entry names the papers it
     # applies to, so dropping a sentence from one paper does not fail the other.
     ALL = ("spotlight", "shortpaper")
     LONG = ("shortpaper",)
+    SPOT = ("spotlight",)   # the corrected fixed-judge mechanism, 2pp only so far
     CHECKS = [
         # (label, recomputed, as written in the paper, tolerance, which papers)
         ("accuracy loss, pp",        100*(y0.mean()-y9.mean()), "31.7",  0.15,  ALL),
@@ -122,20 +149,20 @@ def main() -> None:
         ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015, LONG),
         ("precision at step 0",      y0[p0].mean(),             "0.746", 0.0015, ALL),
         ("precision at step 99",     y9[p9].mean(),             "0.429", 0.0015, ALL),
-        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01,  ALL),
-        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01,  ALL),
+        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01,  LONG),
+        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01,  LONG),
         ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015, ALL),
         ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015, ALL),
         ("flag from prevalence",     fpred,                     "0.371", 0.0015, ALL),
-        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, ALL),
+        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, LONG),
         ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0,  LONG),
-        ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  ALL),
-        ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15,  ALL),
+        ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  LONG),
+        ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15,  LONG),
         ("total rollouts",           sum(len(D[s]) for s in STEPS), "35{,}728", 0, ALL),
         ("problems",                 len({r["prompt_idx"] for r in D[0]}), "406", 0, ALL),
         # the corrected mechanism: the flat AUROC is a cancellation
-        ("AUROC, step-99 negatives", auc_swap(0, 99),           "0.809", 0.002, ALL),
-        ("AUROC, step-99 positives", auc_swap(99, 0),           "0.737", 0.002, ALL),
+        ("AUROC, step-99 negatives", auc_swap(0, 99),           "0.809", 0.002, LONG),
+        ("AUROC, step-99 positives", auc_swap(99, 0),           "0.737", 0.002, LONG),
         ("pass on correct, step 0",  strat[("CORRECT", 0)],     "0.686", 0.0015, ALL),
         ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, ALL),
         ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, ALL),
@@ -145,7 +172,7 @@ def main() -> None:
         ("AUROC CI low",            auroc_lo,                  "-0.048", 0.004, ALL),
         ("AUROC CI high",           auroc_hi,                  "+0.014", 0.004, ALL),
         ("p, correct stratum",      p_corr,                    "0.013", 0.006, ALL),
-        ("p, illegal stratum",      p_ill,                     "0.004", 0.0005, ALL),
+        ("p, illegal stratum",      p_ill,                     "0.004", 0.0005, LONG),
         ("p, middle stratum",       p_mid,                     "0.74",  0.10,  ALL),
         ("flag rate minimum",       flag_min,                  "0.294", 0.0015, ALL),
         ("relative accuracy fall",  rel_acc,                   "58",    1.0,   ALL),
@@ -153,6 +180,13 @@ def main() -> None:
         ("illegal share of wrong, 0",  ill0,                   "28",    1.0,   ALL),
         ("illegal share of wrong, 99", ill9,                   "43",    1.0,   ALL),
         ("precision drop, percent", prec_drop,                 "42",    1.0,   ALL),
+        # the corrected mechanism: a fixed judge, changed inputs
+        ("repeated (prompt,eqn) keys", n_repeat,               "965",   0,     SPOT),
+        ("of those, straddling thr",   n_straddle,             "one",   None,  SPOT),
+        ("no-paren share, step 0",     noparen0,               "0.017", 0.0015, SPOT),
+        ("no-paren share, step 99",    noparen99,              "0.982", 0.0015, SPOT),
+        ("matched: with parentheses",  paren_yes,              "0.746", 0.0015, SPOT),
+        ("matched: without",           paren_no,               "0.548", 0.0015, SPOT),
     ]
 
     which = "spotlight" if "spotlight" in a.tex else "shortpaper"
@@ -160,6 +194,11 @@ def main() -> None:
     print(f"  {'quantity':<26}{'recomputed':>12}{'in paper':>11}   status")
     for label, got, written, tol, applies in CHECKS:
         if which not in applies:
+            continue
+        if tol is None:            # spelled-out count, checked for presence only
+            print(f"  {label:<26}{got:>12.0f}{written:>11}   "
+                  f"{'OK' if (got == 1 and written in prose) else 'CHECK'}")
+            bad += 0 if (got == 1 and written in prose) else 1
             continue
         want = float(written.replace("{,}", "").replace(",", "").lstrip("+"))
         num_ok = abs(got - want) <= tol
