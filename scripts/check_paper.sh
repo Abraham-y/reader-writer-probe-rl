@@ -72,6 +72,32 @@ flat = re.sub(r"\\begin\{table\}.*?\\end\{table\}", " ", prose, flags=re.S)
 flat = re.sub(r"[\\{}$]", " ", re.sub(r"\\[a-zA-Z]+\{([^{}]*)\}", r"\1", flat)).replace("\n", " ")
 longs = [s for s in re.split(r"(?<=[.!?]) ", flat) if len(s.split()) > 45]
 print(f"  45+ word sents {len(longs)}" + ("" if not longs else f"  <-- e.g. {' '.join(longs[0].split())[:60]}..."))
+
+# The rest of the AI-writing tells, so a rewrite cannot quietly reintroduce
+# them. Numeric ranges (1--3) and the table's empty-cell marker are not dashes
+# used as prose asides, so they are excluded rather than flagged forever.
+TELLS = {
+    "AI vocabulary": r"\b(crucial|delve|pivotal|underscore\w*|showcase\w*|testament|tapestry|landscape|intricate|nuanced|realm|foster\w*|garner\w*|leverage\w*|seamless\w*|vibrant|profound)\b",
+    "copula avoidance": r"\b(serves as|stands as|represents a|acts as a|functions as)\b",
+    "negative parallel": r"(not (just|merely|only) \w+[^.]{0,40}\bbut\b)",
+    "authority trope": r"\b(the real question is|at its core|fundamentally|what really matters)\b",
+    "signposting": r"\b(let us|let's|we now turn|without further ado)\b",
+    "filler": r"\b(it is important to note|in order to|due to the fact that)\b",
+    "curly quotes": "[\u201c\u201d\u2018\u2019]",
+}
+found = {n: re.findall(p, flat, re.I) for n, p in TELLS.items()}
+found = {n: h for n, h in found.items() if h}
+if not found:
+    print("  ai-writing tells 0")
+else:
+    for n, h in found.items():
+        ex = h[0] if isinstance(h[0], str) else h[0][0]
+        print(f"  ai-writing tells {n}: {len(h)}  <-- e.g. \"{ex}\"")
+
+words = [len(x.split()) for x in re.split(r"(?<=[.!?]) ", flat) if x.strip()]
+if words:
+    print(f"  rhythm         {len(words)} sentences, mean {sum(words)//len(words)}w, "
+          f"{sum(1 for w in words if w < 12)} under 12w")
 PY
 
 if python3 scripts/make_submission_tex.py --check "$TEX.tex" >/dev/null 2>&1; then
