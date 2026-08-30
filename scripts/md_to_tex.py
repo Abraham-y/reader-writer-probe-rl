@@ -1,4 +1,4 @@
-"""Edit the paper as markdown; rebuild the LaTeX from it.
+"""Edit the paper as plain text; rebuild the LaTeX from it.
 
 WHY THIS EXISTS
 Rewriting prose inside LaTeX means stepping around \\textbf, \\emph, escaped
@@ -12,10 +12,10 @@ They are lifted verbatim from the existing .tex every time, because the table's
 retyped digit there is exactly the defect that check exists to catch. The
 markdown carries a {{TABLE}} marker; the real table is spliced in at build time.
 
-    python scripts/md_to_tex.py --extract       # .tex -> .md  (once, to start)
-    python scripts/md_to_tex.py                 # .md  -> .tex (after editing)
+    python scripts/md_to_tex.py --extract       # .tex -> .txt (once, to start)
+    python scripts/md_to_tex.py                 # .txt -> .tex (after editing)
 
-MARKDOWN YOU CAN USE
+LIGHT MARKUP YOU CAN USE (everything else passes through as-is)
     ## Heading            -> \\section{Heading}
     **bold**              -> \\textbf{bold}
     *italic*              -> \\emph{italic}
@@ -117,12 +117,24 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tex", default="writeup_judge_spotlight.tex")
-    ap.add_argument("--md", default=None, help="defaults to the .tex name with .md")
+    ap.add_argument("--md", default=None,
+                    help="prose file; defaults to the .tex name with .txt (or .md if that exists)")
     ap.add_argument("--extract", action="store_true",
                     help="generate the .md FROM the .tex (start here)")
     a = ap.parse_args()
     tex_p = os.path.join(ROOT, a.tex)
-    md_p = os.path.join(ROOT, a.md or a.tex.replace(".tex", ".md"))
+    if a.md:
+        md_p = os.path.join(ROOT, a.md)
+    else:
+        # .txt is the default so the prose opens in a plain editor rather than a
+        # markdown previewer. .md is still honoured if that is what exists, but
+        # never both: two editable copies of one paper is how files drift apart.
+        txt = os.path.join(ROOT, a.tex.replace(".tex", ".txt"))
+        md = os.path.join(ROOT, a.tex.replace(".tex", ".md"))
+        if os.path.exists(txt) and os.path.exists(md):
+            sys.exit(f"both {os.path.basename(txt)} and {os.path.basename(md)} exist; "
+                     "delete one so there is a single source of truth")
+        md_p = md if (os.path.exists(md) and not os.path.exists(txt)) else txt
     tex = open(tex_p).read()
 
     if a.extract:
