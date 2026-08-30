@@ -99,3 +99,48 @@ paper is not that -- it has a real thesis and hedges its premise properly
 ("we claim neither mechanism as novel"). What it has instead is an abstract that
 was never updated after the August correction, and a better version of its own
 headline sitting unused in Section 4.3.
+
+
+## Decision: target InterpScience (added 2026-08-29, late)
+
+**Long track, 9 pages, references and appendices excluded.** The extra room is
+the point: an adversarial reviewer's first attack on the 6pp cut is that the
+interpretability content has been cut out of it, which is fatal at this venue
+specifically.
+
+### Resolve first
+- **Deadline is ambiguous on their own CFP page**, which lists both
+  "September 01, 2026" and "August 28, 2026". Reviewing runs Sept 03-17, so
+  Sep 1 is almost certainly operative and Aug 28 the original -- but confirm by
+  email before relying on it.
+- **Reciprocal reviewing is required**: at least one author must serve, 2-3
+  papers, Sept 03-17.
+- Forbids concurrent submission to any other workshop. Since JUDGe was not
+  submitted, this is clean.
+- No per-author cap, so the SAE paper does not block this one.
+
+### Work, in priority order
+1. **Restore the interpretability content.** `writeup_workshop_full.tex` has
+   "The probe is a reader, not a controller" -- activation-addition steering
+   with matched random-direction controls, the causal null, cross-position
+   cosines -- and the 0.939 position-stratified rebuttal to "it is just a length
+   detector". All of it is absent from the 6pp. At this venue that section is
+   not optional; it is the reason the paper belongs here.
+2. **Lead with the asymmetry the paper can evidence in one artifact.** Done in
+   the abstract and Contribution 1 already: surface monitor at 0.925 read-only,
+   0.0000 as reward, and the non-monotone ladder.
+3. **Abstract is 435 words.** Needs restructuring to ~200, not trimming.
+4. **Section 4.2 is stale.** Either port the corrected judge analysis from
+   `writeup_judge_spotlight.txt` (fixed function, changed inputs, the
+   parenthesis result, corrected p-values, the missing control and
+   Qwen-judges-Qwen caveats) or cut the section. Do not ship it as it stands.
+5. **Fix "tightening steadily thereafter"** -- Table 2 retraces 0.294 to 0.317
+   while accuracy still falls. And step 20 does not survive correction.
+6. **Add an actor table.** Fourteen distinct entities, no map, and "monitor"
+   denotes at least four of them.
+7. **Move Limitations into the body.** 9pp gives the room the 6pp did not.
+8. **Extend the prose gate to this file.** `verify_prose_numbers.py` currently
+   covers spotlight and shortpaper only.
+
+Most of this is assembly from material already written and already gated. The
+only genuinely new writing is the abstract and the actor table.

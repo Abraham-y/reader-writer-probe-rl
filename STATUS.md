@@ -37,41 +37,13 @@ the recomputed one and exits non-zero on disagreement.
 
 ### Venue
 
-**Not submitted to JUDGe (deadline 2026-08-29).** Decided against on the night.
-The finding is sound and every number is gated, but the paper around it was not
-finished, and the reasons were specific rather than nerves:
+**Target: InterpScience (Interpretability as a Science), NeurIPS 2026.**
+Long track, 9pp, references and appendices excluded. Deadline listed as both
+Sep 1 and Aug 28 on their CFP -- confirm by email. Reciprocal reviewing
+required. Non-archival. Forbids concurrent workshop submission.
 
-1. **Three actors, never distinguished.** The policy (Qwen 0.5B, the thing that
-   broke), the probe (the bad reward that broke it), and the judge (Qwen 7B,
-   which never changed) are all called "the model" at various points. A reader
-   meeting this cold cannot follow it. A table of the three would fix it.
-2. **The framing is buried.** The whole exercise is only possible because
-   Countdown has an exact checker: you cannot compute a judge's AUROC without
-   ground truth, so nobody monitors it in production, they compute it once at
-   validation and file it. That is the frame for everything and it currently
-   appears on page 2 as an aside.
-3. **The premise is overstated.** "Teams just monitor judge quality" is half a
-   straw man. People do watch score distributions; Li (2026) exists because they
-   do and cannot attribute the drift. The honest contribution is narrower:
-   what that ordinary alarm buys you, in RL steps, against a monitor whose own
-   report card still reads healthy.
-
-Also unresolved: the prose is largely LLM-written and reads that way. NeurIPS
-policy permits this (authors own the content, no disclosure needed for writing
-aid) but it is not something to present from a stage.
-
-**Where it can still go.** All NeurIPS 2026, later deadlines, all needing only
-modest reframing:
-
-| Workshop | Deadline |
-|---|---|
-| ATTRIB (Attributing Model Behavior at Scale) | Sep 2 |
-| Interp4Discovery | Sep 3 |
-| IAB (Interpreting Agent Behavior) | Sep 6 |
-| XAI4Science | Sep 6 |
-
-InterpScience (Sep 2) is spoken for by the SAE paper and forbids concurrent
-submission.
+Not submitted to JUDGe (deadline 2026-08-29), by decision on the night. See
+ASSESSMENT.md for the full reasoning and the work plan.
 
 ### What the paper actually found
 
