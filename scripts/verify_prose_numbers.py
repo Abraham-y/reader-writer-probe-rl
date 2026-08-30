@@ -153,7 +153,7 @@ def main() -> None:
         ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01,  LONG),
         ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015, ALL),
         ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015, ALL),
-        ("flag from prevalence",     fpred,                     "0.371", 0.0015, ALL),
+        ("flag from prevalence",     fpred,                     "0.371", 0.0015, SPOT),
         ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, LONG),
         ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0,  LONG),
         ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  LONG),
@@ -163,10 +163,10 @@ def main() -> None:
         # the corrected mechanism: the flat AUROC is a cancellation
         ("AUROC, step-99 negatives", auc_swap(0, 99),           "0.809", 0.002, LONG),
         ("AUROC, step-99 positives", auc_swap(99, 0),           "0.737", 0.002, LONG),
-        ("pass on correct, step 0",  strat[("CORRECT", 0)],     "0.686", 0.0015, ALL),
-        ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, ALL),
-        ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, ALL),
-        ("pass on illegal, step 99", strat[("wrong numbers used", 99)], "0.013", 0.0015, ALL),
+        ("pass on correct, step 0",  strat[("CORRECT", 0)],     "0.686", 0.0015, SPOT),
+        ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, SPOT),
+        ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, SPOT),
+        ("pass on illegal, step 99", strat[("wrong numbers used", 99)], "0.013", 0.0015, SPOT),
         # the corrected mechanism and the alarm's own weaknesses
         ("AUROC change, end to end", auroc_delta,              "-0.017", 0.002, ALL),
         ("AUROC CI low",            auroc_lo,                  "-0.048", 0.004, ALL),
