@@ -54,31 +54,62 @@ def main() -> None:
     l0 = y0[p0].mean() / y0.mean(); l9 = y9[p9].mean() / y9.mean()
 
     # (label, recomputed, as-written-in-the-paper, tolerance)
+    from sklearn.metrics import roc_auc_score as _auc
+    _pos = {st: [r["judge_score"] for r in D[st] if r["correct"] == 1] for st in (0, 99)}
+    _neg = {st: [r["judge_score"] for r in D[st] if r["correct"] == 0] for st in (0, 99)}
+    def auc_swap(pst, nst):
+        """AUROC with positives from one checkpoint and negatives from another.
+        This is what shows the flat end-to-end AUROC is two effects cancelling."""
+        return _auc([1]*len(_pos[pst]) + [0]*len(_neg[nst]), _pos[pst] + _neg[nst])
+    strat = {}
+    for b in ("CORRECT", "wrong numbers used"):
+        for st in (0, 99):
+            sel = [r for r in D[st] if bucket(r) == b]
+            strat[(b, st)] = np.mean([r["judge_score"] >= thr for r in sel])
+
+    # Some claims live only in the longer cut. Each entry names the papers it
+    # applies to, so dropping a sentence from one paper does not fail the other.
+    ALL = ("spotlight", "shortpaper")
+    LONG = ("shortpaper",)
     CHECKS = [
-        ("accuracy loss, pp",        100*(y0.mean()-y9.mean()), "31.7",  0.15),
-        ("AUROC at step 0",          aur[0],                    "0.785", 0.0015),
-        ("AUROC at step 99",         aur[99],                   "0.769", 0.0015),
-        ("largest AUROC dip",        aur[0]-min(aur.values()),  "0.031", 0.002),
-        ("accuracy at step 0",       y0.mean(),                 "0.544", 0.0015),
-        ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015),
-        ("precision at step 0",      y0[p0].mean(),             "0.746", 0.0015),
-        ("precision at step 99",     y9[p9].mean(),             "0.429", 0.0015),
-        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01),
-        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01),
-        ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015),
-        ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015),
-        ("flag from prevalence",     fpred,                     "0.371", 0.0015),
-        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0),
-        ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0),
-        ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15),
-        ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15),
-        ("total rollouts",           sum(len(D[s]) for s in STEPS), "35{,}728", 0),
-        ("problems",                 len({r["prompt_idx"] for r in D[0]}), "406", 0),
+        # (label, recomputed, as written in the paper, tolerance, which papers)
+        ("accuracy loss, pp",        100*(y0.mean()-y9.mean()), "31.7",  0.15,  ALL),
+        ("AUROC at step 0",          aur[0],                    "0.785", 0.0015, ALL),
+        ("AUROC at step 99",         aur[99],                   "0.769", 0.0015, ALL),
+        ("largest AUROC dip",        aur[0]-min(aur.values()),  "0.031", 0.002, LONG),
+        # the spotlight writes these as percentages of the pool, the 3pp version
+        # as accuracies; check whichever form the paper actually uses
+        ("share correct, step 0",    100*y0.mean(),             "54.4",  0.15,  ALL),
+        ("share correct, step 99",   100*y9.mean(),             "22.6",  0.15,  ALL),
+        ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015, LONG),
+        ("precision at step 0",      y0[p0].mean(),             "0.746", 0.0015, ALL),
+        ("precision at step 99",     y9[p9].mean(),             "0.429", 0.0015, ALL),
+        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01,  ALL),
+        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01,  ALL),
+        ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015, ALL),
+        ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015, ALL),
+        ("flag from prevalence",     fpred,                     "0.371", 0.0015, ALL),
+        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, ALL),
+        ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0,  LONG),
+        ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  ALL),
+        ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15,  ALL),
+        ("total rollouts",           sum(len(D[s]) for s in STEPS), "35{,}728", 0, ALL),
+        ("problems",                 len({r["prompt_idx"] for r in D[0]}), "406", 0, ALL),
+        # the corrected mechanism: the flat AUROC is a cancellation
+        ("AUROC, step-99 negatives", auc_swap(0, 99),           "0.809", 0.002, ALL),
+        ("AUROC, step-99 positives", auc_swap(99, 0),           "0.737", 0.002, ALL),
+        ("pass on correct, step 0",  strat[("CORRECT", 0)],     "0.686", 0.0015, ALL),
+        ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, ALL),
+        ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, ALL),
+        ("pass on illegal, step 99", strat[("wrong numbers used", 99)], "0.013", 0.0015, ALL),
     ]
 
+    which = "spotlight" if "spotlight" in a.tex else "shortpaper"
     bad = 0
     print(f"  {'quantity':<26}{'recomputed':>12}{'in paper':>11}   status")
-    for label, got, written, tol in CHECKS:
+    for label, got, written, tol, applies in CHECKS:
+        if which not in applies:
+            continue
         want = float(written.replace("{,}", "").replace(",", ""))
         num_ok = abs(got - want) <= tol
         # is it actually written down? skip the presence test for values that
