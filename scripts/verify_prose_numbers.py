@@ -67,6 +67,44 @@ def main() -> None:
             sel = [r for r in D[st] if bucket(r) == b]
             strat[(b, st)] = np.mean([r["judge_score"] >= thr for r in sel])
 
+    # --- quantities added by the corrected-mechanism section -------------
+    _prompts = np.array(sorted({r["prompt_idx"] for r in D[0]}))
+    _byp = {st: {q: [r for r in D[st] if r["prompt_idx"] == q] for q in _prompts}
+            for st in (0, 99)}
+    _rng = np.random.default_rng(0)
+    _draws = [_rng.choice(_prompts, len(_prompts), True) for _ in range(2000)]
+
+    def _auc_draw(st, draw):
+        rows = [r for q in draw for r in _byp[st][q]]
+        return _auc([r["correct"] for r in rows], [r["judge_score"] for r in rows])
+    _dboot = np.array([_auc_draw(99, d) - _auc_draw(0, d) for d in _draws])
+    auroc_delta = aur[99] - aur[0]
+    auroc_lo, auroc_hi = np.percentile(_dboot, [2.5, 97.5])
+
+    def _strat_p(b):
+        def rate(st, draw):
+            rows = [r for q in draw for r in _byp[st][q] if bucket(r) == b]
+            return np.mean([r["judge_score"] >= thr for r in rows]) if rows else np.nan
+        d = np.array([rate(99, dr) - rate(0, dr) for dr in _draws])
+        d = d[~np.isnan(d)]
+        return max(2 * min((d < 0).mean(), (d > 0).mean()), 1 / len(d))
+    p_corr = _strat_p("CORRECT")
+    p_ill = _strat_p("wrong numbers used")
+    p_mid = _strat_p("valid form, wrong value")
+
+    # flag rate at its minimum, and the two relative falls
+    _f = {st: np.mean([r["judge_score"] >= thr
+                       for r in [json.loads(l) for l in open(f"{JS}/step_{st}.jsonl")]])
+          for st in (80,)}
+    flag_min = _f[80]
+    rel_acc = 100 * (y0.mean() - y9.mean()) / y0.mean()
+    rel_flag = 100 * (p0.mean() - p9.mean()) / p0.mean()
+    # composition of the WRONG-answer pool
+    _ill = lambda st: (len([r for r in D[st] if bucket(r) == "wrong numbers used"])
+                       / len([r for r in D[st] if r["correct"] == 0]))
+    ill0, ill9 = 100 * _ill(0), 100 * _ill(99)
+    prec_drop = 100 * (y0[p0].mean() - y9[p9].mean()) / y0[p0].mean()
+
     # Some claims live only in the longer cut. Each entry names the papers it
     # applies to, so dropping a sentence from one paper does not fail the other.
     ALL = ("spotlight", "shortpaper")
@@ -102,6 +140,19 @@ def main() -> None:
         ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, ALL),
         ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, ALL),
         ("pass on illegal, step 99", strat[("wrong numbers used", 99)], "0.013", 0.0015, ALL),
+        # the corrected mechanism and the alarm's own weaknesses
+        ("AUROC change, end to end", auroc_delta,              "-0.017", 0.002, ALL),
+        ("AUROC CI low",            auroc_lo,                  "-0.048", 0.004, ALL),
+        ("AUROC CI high",           auroc_hi,                  "+0.014", 0.004, ALL),
+        ("p, correct stratum",      p_corr,                    "0.013", 0.006, ALL),
+        ("p, illegal stratum",      p_ill,                     "0.004", 0.0005, ALL),
+        ("p, middle stratum",       p_mid,                     "0.74",  0.10,  ALL),
+        ("flag rate minimum",       flag_min,                  "0.294", 0.0015, ALL),
+        ("relative accuracy fall",  rel_acc,                   "58",    1.0,   ALL),
+        ("relative flag fall",      rel_flag,                  "37",    1.0,   ALL),
+        ("illegal share of wrong, 0",  ill0,                   "28",    1.0,   ALL),
+        ("illegal share of wrong, 99", ill9,                   "43",    1.0,   ALL),
+        ("precision drop, percent", prec_drop,                 "42",    1.0,   ALL),
     ]
 
     which = "spotlight" if "spotlight" in a.tex else "shortpaper"
@@ -110,7 +161,7 @@ def main() -> None:
     for label, got, written, tol, applies in CHECKS:
         if which not in applies:
             continue
-        want = float(written.replace("{,}", "").replace(",", ""))
+        want = float(written.replace("{,}", "").replace(",", "").lstrip("+"))
         num_ok = abs(got - want) <= tol
         # is it actually written down? skip the presence test for values that
         # legitimately appear only inside the table (none here, but be explicit)
