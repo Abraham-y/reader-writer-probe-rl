@@ -133,7 +133,7 @@ def main() -> None:
 
     # Some claims live only in the longer cut. Each entry names the papers it
     # applies to, so dropping a sentence from one paper does not fail the other.
-    ALL = ("spotlight", "shortpaper")
+    ALL = ("spotlight", "shortpaper", "interpscience")
     LONG = ("shortpaper",)
     SPOT = ("spotlight",)   # the corrected fixed-judge mechanism, 2pp only so far
     CHECKS = [
@@ -189,7 +189,8 @@ def main() -> None:
         ("matched: without",           paren_no,               "0.548", 0.0015, SPOT),
     ]
 
-    which = "spotlight" if "spotlight" in a.tex else "shortpaper"
+    which = ("spotlight" if "spotlight" in a.tex
+             else "interpscience" if "interpscience" in a.tex else "shortpaper")
     bad = 0
     print(f"  {'quantity':<26}{'recomputed':>12}{'in paper':>11}   status")
     for label, got, written, tol, applies in CHECKS:
