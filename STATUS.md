@@ -37,22 +37,56 @@ the recomputed one and exits non-zero on disagreement.
 
 ### Venue
 
-| | |
+**Not submitted to JUDGe (deadline 2026-08-29).** Decided against on the night.
+The finding is sound and every number is gated, but the paper around it was not
+finished, and the reasons were specific rather than nerves:
+
+1. **Three actors, never distinguished.** The policy (Qwen 0.5B, the thing that
+   broke), the probe (the bad reward that broke it), and the judge (Qwen 7B,
+   which never changed) are all called "the model" at various points. A reader
+   meeting this cold cannot follow it. A table of the three would fix it.
+2. **The framing is buried.** The whole exercise is only possible because
+   Countdown has an exact checker: you cannot compute a judge's AUROC without
+   ground truth, so nobody monitors it in production, they compute it once at
+   validation and file it. That is the frame for everything and it currently
+   appears on page 2 as an aside.
+3. **The premise is overstated.** "Teams just monitor judge quality" is half a
+   straw man. People do watch score distributions; Li (2026) exists because they
+   do and cannot attribute the drift. The honest contribution is narrower:
+   what that ordinary alarm buys you, in RL steps, against a monitor whose own
+   report card still reads healthy.
+
+Also unresolved: the prose is largely LLM-written and reads that way. NeurIPS
+policy permits this (authors own the content, no disclosure needed for writing
+aid) but it is not something to present from a stage.
+
+**Where it can still go.** All NeurIPS 2026, later deadlines, all needing only
+modest reframing:
+
+| Workshop | Deadline |
 |---|---|
-| **Submitting** | **JUDGe** — "Can We Trust the Judge? Building Reliable Evaluation for Language Models", NeurIPS 2026, Atlanta |
-| Deadline | **2026-08-29** (AoE), OpenReview, double-blind, ≥3 reviews |
-| Limit | 6 pages + references (full-paper track) |
-| File | **`writeup_judge.tex`** → `writeup_judge.pdf`, 8 pp total, main text 1–7 |
-| Title | *A Monitor's AUROC Is Not Evidence the Monitor Works* |
+| ATTRIB (Attributing Model Behavior at Scale) | Sep 2 |
+| Interp4Discovery | Sep 3 |
+| IAB (Interpreting Agent Behavior) | Sep 6 |
+| XAI4Science | Sep 6 |
 
-The SAE compression paper goes to **Interpretability as a Science** (Sydney,
-deadline 2026-08-28) instead. That workshop forbids concurrent submission to any
-other workshop, so it is one venue per paper, and splitting them decorrelates the
-outcomes rather than putting both in front of one committee.
+InterpScience (Sep 2) is spoken for by the SAE paper and forbids concurrent
+submission.
 
-Two things still to confirm by email, both one-liners: whether JUDGe counts
-appendices toward the 6 pages (`judge-neurips-2026@googlegroups.com`), and
-whether InterpScience caps submissions per author (`interpscience@gmail.com`).
+### What the paper actually found
+
+A fixed judge, fed a policy collapsing from 54.4% to 22.6% accuracy, reports an
+essentially unchanged AUROC (0.785 -> 0.769). Not because it has a blind spot:
+because it is a fixed function and was never the variable. Of 965 identical
+(problem, equation) pairs seen early and late, exactly ONE gets a different
+verdict. What changed is the input distribution, in composition and in surface
+form -- the policy stops writing parentheses (0.017 -> 0.982 of correct answers)
+and the judge treats the same arithmetic 20 points differently depending on
+bracketing (+0.198, 95% CI [+0.131, +0.265]).
+
+Precision looks like it collapses (0.746 -> 0.429) but that is the same
+confound in reverse. The one statistic that moves and needs no labels is the
+flag rate, 0.500 -> 0.317.
 
 ### The one open item
 
