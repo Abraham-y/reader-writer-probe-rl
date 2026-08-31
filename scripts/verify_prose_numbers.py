@@ -136,26 +136,31 @@ def main() -> None:
     ALL = ("spotlight", "shortpaper", "interpscience")
     LONG = ("shortpaper",)
     SPOT = ("spotlight",)   # the corrected fixed-judge mechanism, 2pp only so far
+    # The interpscience cut carries the corrected judge mechanism and the
+    # LR+/lift material, so those checks apply to it too. Scoped one by one
+    # rather than promoted to ALL: the shorter cuts genuinely drop some.
+    LONG_I = ("shortpaper", "interpscience")
+    SPOT_I = ("spotlight", "interpscience")
     CHECKS = [
         # (label, recomputed, as written in the paper, tolerance, which papers)
         ("accuracy loss, pp",        100*(y0.mean()-y9.mean()), "31.7",  0.15,  ALL),
         ("AUROC at step 0",          aur[0],                    "0.785", 0.0015, ALL),
         ("AUROC at step 99",         aur[99],                   "0.769", 0.0015, ALL),
-        ("largest AUROC dip",        aur[0]-min(aur.values()),  "0.031", 0.002, LONG),
+        ("largest AUROC dip",        aur[0]-min(aur.values()),  "0.031", 0.002, LONG_I),
         # the spotlight writes these as percentages of the pool, the 3pp version
         # as accuracies; check whichever form the paper actually uses
         ("share correct, step 0",    100*y0.mean(),             "54.4",  0.15,  ALL),
         ("share correct, step 99",   100*y9.mean(),             "22.6",  0.15,  ALL),
-        ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015, LONG),
+        ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015, LONG_I),
         ("precision at step 0",      y0[p0].mean(),             "0.746", 0.0015, ALL),
         ("precision at step 99",     y9[p9].mean(),             "0.429", 0.0015, ALL),
-        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01,  LONG),
-        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01,  LONG),
+        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01, LONG_I),
+        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01, LONG_I),
         ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015, ALL),
         ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015, ALL),
         ("flag from prevalence",     fpred,                     "0.371", 0.0015, SPOT),
-        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, LONG),
-        ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0,  LONG),
+        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, LONG_I),
+        ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0, LONG_I),
         ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  LONG),
         ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15,  LONG),
         ("total rollouts",           sum(len(D[s]) for s in STEPS), "35{,}728", 0, ALL),
@@ -181,12 +186,12 @@ def main() -> None:
         ("illegal share of wrong, 99", ill9,                   "43",    1.0,   ALL),
         ("precision drop, percent", prec_drop,                 "42",    1.0,   ALL),
         # the corrected mechanism: a fixed judge, changed inputs
-        ("repeated (prompt,eqn) keys", n_repeat,               "965",   0,     SPOT),
-        ("of those, straddling thr",   n_straddle,             "one",   None,  SPOT),
-        ("no-paren share, step 0",     noparen0,               "0.017", 0.0015, SPOT),
-        ("no-paren share, step 99",    noparen99,              "0.982", 0.0015, SPOT),
-        ("matched: with parentheses",  paren_yes,              "0.746", 0.0015, SPOT),
-        ("matched: without",           paren_no,               "0.548", 0.0015, SPOT),
+        ("repeated (prompt,eqn) keys", n_repeat,               "965",   0, SPOT_I),
+        ("of those, straddling thr",   n_straddle,             "one",   None, SPOT_I),
+        ("no-paren share, step 0",     noparen0,               "0.017", 0.0015, SPOT_I),
+        ("no-paren share, step 99",    noparen99,              "0.982", 0.0015, SPOT_I),
+        ("matched: with parentheses",  paren_yes,              "0.746", 0.0015, SPOT_I),
+        ("matched: without",           paren_no,               "0.548", 0.0015, SPOT_I),
     ]
 
     which = ("spotlight" if "spotlight" in a.tex

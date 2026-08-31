@@ -80,9 +80,21 @@ for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_jud
   fi
 done
 
+# The reward ladder's three read-only AUROCs were the paper's load-bearing
+# uncheckable numbers: two ship inside their arms' artifacts, and the third was
+# quoted for three commits as 0.978 -- a raw probe fit inside the arms script,
+# not the reward. This recomputes arm C from the shipped reward pickle and
+# fails if the inversion the paper claims stops holding.
+if [ -f writeup_interpscience.tex ] && [ -f extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl ]; then
+  run "reward ladder: writeup_interpscience" \
+      python -W ignore scripts/verify_reward_ladder.py --tex writeup_interpscience.tex
+else
+  printf '%-46s%s\n' "reward ladder" "SKIP (tex or reward probe missing)"
+fi
+
 # Table cells were gated long before prose numbers were, and the 2pp rewrite
 # retyped ~20 figures into sentences where nothing checked them. This closes it.
-for tex in writeup_judge_spotlight writeup_judge_shortpaper; do
+for tex in writeup_judge_spotlight writeup_judge_shortpaper writeup_interpscience; do
   if [ -f "$tex.tex" ] && [ -d followup/results/fragility/judge_lag ]; then
     run "prose numbers: $tex" \
         python -W ignore scripts/verify_prose_numbers.py --tex "$tex.tex"
