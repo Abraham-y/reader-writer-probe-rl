@@ -33,7 +33,12 @@ def main() -> None:
     ap.add_argument("--tex", default="writeup_judge_spotlight.tex")
     a = ap.parse_args()
     tex = open(os.path.join(_ROOT, a.tex)).read()
+    # Body AND appendix. Appendices sit after the bibliography, and when
+    # material moves there it must not fall out of this check -- an ungated
+    # region is how every number this suite exists to protect went wrong before.
     prose = tex[tex.index(r"\begin{abstract}"):tex.index(r"\begin{thebibliography}")]
+    if "\\appendix" in tex:
+        prose += "\n" + tex[tex.index("\\appendix"):]
     prose = re.sub(r"\\begin\{table\}.*?\\end\{table\}", " ", prose, flags=re.S)
 
     D = {st: [json.loads(l) for l in open(f"{JS}/step_{st}.jsonl")] for st in STEPS}

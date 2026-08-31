@@ -13,6 +13,11 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{enumitem}
+% The bundled style stamps "Submitted to the 40th Conference on NeurIPS", which
+% is the main-track notice and wrong for a workshop submission. Override it.
+\makeatletter
+\renewcommand{\@noticestring}{Submitted to the InterpScience Workshop at NeurIPS 2026. Do not distribute.}
+\makeatother
 \setlength{\abovecaptionskip}{4pt}\setlength{\belowcaptionskip}{0pt}
 % No paragraph indents anywhere; vertical space separates paragraphs.
 \setlength{\parindent}{0pt}\setlength{\parskip}{0.38em}
@@ -31,20 +36,19 @@ Measurement Validity for Interpretability Artifacts Used as Control Signals}
 \begin{document}
 \maketitle
 
-
 \begin{abstract}
-A linear probe is a small classifier trained on a language model's internal activations. Ours predicts whether the answer the model is about to give will be correct, and it is good at it. On held-out data it reaches an AUROC of $0.982$: shown one correct and one incorrect answer, it ranks them the right way round $98.2\%$ of the time. It is also useful. Picking the best of 16 sampled answers by probe score captures $88.8\%$ of the accuracy a perfect picker would gain.
 
-We then make a probe of this kind the reward for reinforcement learning, instead of only reading it. True accuracy falls by $31$ percentage points. Nothing in the objective rewards hiding from the probe, so this is not evasion. The model is doing what the probe asks. A monitor that reads no activations at all, only 39 cheap features of the answer text, scores $0.925$ as a reader and is worse as a reward: it drives accuracy to exactly $0.0000$ while $99.9\%$ of answers remain well-formed. Across three rewards scored on one population the ordering runs backwards, $0.834 \to 0.168$, $0.861 \to 0.073$, $0.925 \to 0.000$. A better reader is not a safer writer.
+A linear probe on a $0.5$B policy's hidden states predicts whether the answer it is about to give will be correct, reaching held-out AUROC $0.982$. Promote a probe of this kind to the RL reward and true accuracy falls $31$ percentage points. Our question is whether the monitor's own accuracy shows it. It does not. Scored at every checkpoint against fresh answers from that same checkpoint, the probe's AUROC is unchanged for about \textbf{40 RLOO steps} after the policy has begun gaming it, and breaks only at step 50. An LLM judge watching the same collapse ends where it began ($0.785 \to 0.769$), with its prevalence-invariant likelihood ratio flat ($2.46 \to 2.57$) across a $31.7$\,pp drop in accuracy. There the reason is visible, because we can verify the judge is a fixed function: of the 965 cases it scored more than once, exactly one changes verdict. Its health was never the variable. What moved was the population it was handed. This is \emph{spectrum bias}, familiar from diagnostic testing, with the causation reversed: deploying an interpretability artifact as a control signal is what destroys the distribution its read-only number was measured on. The one statistic that departs early, $\sim$40 steps before AUROC, is also the only one needing no labels: the share of answers passing a frozen threshold.
 
-Our second question is whether a monitor's own accuracy warns you while this is happening. It does not. Scoring each monitor at every training checkpoint against fresh answers from that same checkpoint, the probe's AUROC is unchanged for about 40 steps after the policy has started gaming it. An LLM judge watching the same collapse ends where it began ($0.785 \to 0.769$), and its prevalence-invariant likelihood ratio does not fall at all ($2.46 \to 2.57$), across a 32-point drop in accuracy. The reason is that the judge is a fixed function: what moved was the population it was handed, not the judge. An AUROC measured on one population says little about the same artifact once the population changes, and deploying the artifact is what changes it. The statistic that does move early needs no labels: the share of answers passed at a frozen threshold, $+38\%$ for the probe and $-37\%$ for the judge.
+Read-only quality does not merely fail to transfer. It orders the outcomes \textbf{backwards}. A monitor reading no activations at all, only 39 cheap features of the answer text, scores $0.925$ as a reader and drives accuracy to exactly $\mathbf{0.0000}$ as a reward, with $99.9\%$ of answers still well-formed. Scored on one population the three rewards rank inversely to how well they read: $0.834 \to 0.168$, $0.861 \to 0.073$, $0.925 \to 0.000$. Nothing in the objective rewards hiding from the monitor, so this is not evasion; the policy is doing what the monitor asks. A better reader is not a safer writer.
+
 \end{abstract}
 
 \section{Introduction}
 
 A probe is a small classifier trained on a model's internal activations to predict something about what the model is doing. Probes are increasingly proposed not as analysis tools but as control signals: refusal directions \citep{arditi2024refusal}, correctness probes \citep{burns2022discovering}, deception probes \citep{pacchiardi2023lie}. The obvious next step is to put one inside the training loop and optimize against it. That step is much less well understood than reading a probe from the outside, and it is the subject of this paper.
 
-Two existing literatures bear on it. Work on reward overoptimization \citep{gao2023scaling, coste2023reward, skalse2022defining, denison2024sycophancy} shows that a proxy reward trained separately from the task gets gamed once a policy can push on it, with no adversarial intent anywhere. Work on monitor evasion \citep{baker2025monitoring, gupta2025rlobfuscation, taufeeque2026atlas, bailey2024obfuscated} shows that monitors reading internal states can be evaded when the monitor enters training as a penalty. A third literature, on LLM evaluators \citep{zheng2023judging}, reaches our conclusion from the measurement side: accuracy and agreement overstate judge reliability \citep{norman2026reliability, weng2026invariance}, judge scores move when only the judge changes \citep{yang2026auditing}, and reward-model benchmark scores predict RLHF outcomes weakly enough that purpose-built benchmarks were needed \citep{frick2024ppe, malik2025rewardbench2}.
+Two literatures bear on it. Reward overoptimization \citep{gao2023scaling, coste2023reward, skalse2022defining, denison2024sycophancy} shows that a proxy reward gets gamed once a policy can push on it, with no adversarial intent anywhere. Monitor evasion \citep{baker2025monitoring, gupta2025rlobfuscation, taufeeque2026atlas, bailey2024obfuscated} shows that monitors reading internal states can be evaded when the monitor enters as a penalty. A third, on LLM evaluators, reaches our conclusion from the measurement side: agreement statistics overstate judge reliability \citep{zheng2023judging, norman2026reliability, weng2026invariance}, and reward-model benchmark scores predict downstream outcomes weakly \citep{yang2026auditing, frick2024ppe, malik2025rewardbench2}.
 
 We claim neither mechanism as novel. What we add is the dynamic case: what a monitor's own quality statistics do \emph{while} the policy it watches degrades. \citet{baker2025monitoring} report monitor recall collapsing under optimization pressure but cannot separate two explanations, because the monitor is not scored on held-apart data: either the agent learned to evade it, or it stopped discriminating. A task with an exact verifier separates them. At every checkpoint we score the monitor against ground truth on answers drawn from that checkpoint, and the answer is that a monitor's health statistics are the last thing to move. This mirrors \citet{beigi2026prime}, who show that probing a policy internally forecasts reward hacking before the visible hack rate rises: the information is there to be read, just not in the monitor's own accuracy against its target.
 
@@ -52,24 +56,17 @@ This matters for interpretability specifically. AUROC, precision and recall are 
 
 We work on Qwen2.5-0.5B trained on Countdown arithmetic \citep{gandhi2024stream} with RLOO \citep{ahmadian2024back}. The task has an exact verifier, so a learned scorer's divergence from ground truth is measurable directly, without preference-model confounds.
 
-\paragraph{Contributions.}
+\paragraph{Contributions.} One claim, in two halves.
 \begin{enumerate}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
-  \item \textbf{Being a good reader does not make a monitor safe to train against.} Our probe reads at AUROC $0.982$ and captures $88.8\%$ of best-of-16 headroom; as a reward it costs $31$\,pp. A surface monitor reading at $0.925$ costs everything, driving accuracy to $0.0000$. Scored on one population the three rewards are ordered inversely to how well they read ($0.834 \to 0.168$, $0.861 \to 0.073$, $0.925 \to 0.000$). (\S\ref{sec:probe-reader}--\S\ref{sec:surface})
-  \item \textbf{A monitor's own accuracy is the last thing to move.} Scored at every checkpoint on that checkpoint's own answers, the probe's AUROC is indistinguishable from where it started through step 40 (paired change $+0.014$, $95\%$ CI $[-0.008, +0.038]$, $p=0.22$) and breaks only at step 50. The policy has been gaming it since step 10. (\S\ref{sec:lag})
-  \item \textbf{The same measurement on a real LLM judge.} Its AUROC dips $0.031$ and recovers, and its operating point does not degrade at all once prevalence is accounted for, across a $31.7$\,pp accuracy collapse. (\S\ref{sec:judge})
-  \item \textbf{One diagnostic works without labels.} The share of answers passed at a frozen threshold departs from its starting value at step 10, about 40 steps before AUROC breaks. Every other statistic here needs the ground truth a deployed evaluator does not have. (\S\ref{sec:lag})
-  \item \textbf{Two recommendations for probing practice.} Before wiring a probe into a gradient, report how much of its AUROC survives conditioning on cheap surface features; ours holds up ($0.982 \to 0.939$) and still collapsed, so the test is necessary and not sufficient. And when tracking an operating point over a changing population, use the positive likelihood ratio, not lift: lift is not prevalence-invariant, and on our judge about $91\%$ of its apparent improvement is the confound it appears to remove. (\S\ref{sec:judge}, \S\ref{sec:surface})
+  \item \textbf{A monitor's read-only quality does not survive its promotion to a target, and gets the order backwards.} Our reader probe reaches AUROC $0.982$; a \emph{different} probe, sharing a direction with it at cosine only $0.163$, costs $31$\,pp when it becomes the reward. A monitor reading only cheap text features reads at $0.925$ and drives accuracy to exactly $\mathbf{0.0000}$, with $99.9\%$ of answers still well-formed. Scored on one population the three rewards rank inversely to how well they read: $0.834 \to 0.168$, $0.861 \to 0.073$, $0.925 \to 0.000$. (\S\ref{sec:probe-rl}, \S\ref{sec:surface})
+  \item \textbf{The monitor's own statistics will not tell you, because they were never about the monitor alone.} Scored at every checkpoint on that checkpoint's own answers, the probe's AUROC is unchanged through step 40 while the policy has been gaming it since step 10. An LLM judge watching the same collapse ends where it began, and there the reason is visible: the judge is a fixed function, so its flat AUROC was never a fact about the judge. Discrimination belongs to a classifier and a population jointly, and deploying the classifier is what moves the population. The one statistic that departs early, $\sim$40 steps before AUROC, is also the only one needing no labels: the share of answers passing a frozen threshold. (\S\ref{sec:lag}, \S\ref{sec:judge})
 \end{enumerate}
 
 \section{Setup}\label{sec:setup}
 
-\textbf{The task.} Countdown. The model is given three or four integers and a target, and must write an equation using each number exactly once that evaluates to the target. A rule-based verifier checks the answer exactly and returns $\{0, 0.1, 1.0\}$. This is why the central measurement of this paper is possible at all: at any point in training we know for free whether any given answer is right.
+Qwen2.5-0.5B on Countdown: given 3--4 integers and a target, produce an equation using each exactly once, with an exact rule-based verifier. $C_{\text{SFT}}$ is a supervised checkpoint; $C_{\text{outcome}}$ is 100 RLOO steps against the verifier, taking pass@1 from $28.6\%$ to $53.5\%$. Eval is 406 procedurally generated problems with no overlap against the RLOO training pool. AUROC here is the probability that a randomly chosen correct answer scores above a randomly chosen incorrect one, so $0.5$ is chance; it is seed-dependent at the $\sim$0.015 level and we do not lean on a third decimal. Appendix~\ref{app:setup} gives probes, hyperparameters and the estimator.
 
-\textbf{The models.} Qwen2.5-0.5B throughout. $C_{\text{SFT}}$ is the supervised starting point, \texttt{asingh15/qwen-sft-countdown-defaultproj}. $C_{\text{outcome}}$ is that model after 100 steps of RLOO \citep{ahmadian2024back} using the verifier itself as the reward (batch 128, KL $10^{-3}$, lr $10^{-5}$), which takes pass@1 from $28.6\%$ to $53.5\%$. Evaluation uses 500 procedurally generated problems, filtered to the 406 that do not appear in the RL training pool.
-
-\textbf{The probes, and what AUROC means here.} Every probe is L2-regularized logistic regression on layer-16 activations, cross-validated with 5-fold \texttt{GroupKFold} grouped by prompt so no prompt lands in both halves, and class-balanced. AUROC is the probability that the probe scores a randomly chosen correct answer above a randomly chosen incorrect one: $0.5$ is chance, $1.0$ is perfect. We use one estimator everywhere, cross-validated then balanced, held out by prompt. Where an in-sample figure exists we do not quote it; the trace-final probe reads $0.995$ in-sample against $0.982$ held out. Balanced AUROC moves by about $0.015$ across analysis seeds, so we do not read a third decimal.
-
-\textbf{Who is who.} This paper has four distinct objects that a reader could reasonably call ``the monitor'' and two probe-RL runs that behave differently. Table~\ref{tab:actors} fixes the names; every later section uses them.
+\textbf{Who is who.} Four objects in this paper could reasonably be called ``the monitor'', and two of them share a name in the literature. Table~\ref{tab:actors} fixes the names.
 
 \begin{table}[h]
 \centering
@@ -78,42 +75,23 @@ We work on Qwen2.5-0.5B trained on Countdown arithmetic \citep{gandhi2024stream}
 \renewcommand{\arraystretch}{0.9}
 \begin{tabular}{llcl}
 \toprule
-name & what it is & AUROC & how it is used here \\
+name & what it reads & AUROC & how it is used here \\
 \midrule
-\multicolumn{4}{l}{\emph{scorers: all of these get called ``monitor''}}\\
 trace-final probe & L16 \texttt{</think>}, last-block label & $0.982$ & read-only; never a reward \\
-reward probe & L16 temp-1, a \emph{different} direction & $0.810$ / $0.861$ & the RL objective; lag ladder \\
-position detector & \texttt{</think>} offset, one regex & $0.915$ & free baseline \\
+reward probe & L16 temp-1, a \emph{different} direction & $0.810$ / $0.861$ & the RL objective; the lag ladder \\
 surface model & 39 text features, no activations & $0.926$ / $0.925$ & free baseline; arm B's reward \\
-LLM judge & \texttt{Qwen2.5-7B-Instruct}, first-block & $0.785$ & bystander; never optimised against \\[2pt]
-\multicolumn{4}{l}{\emph{probe-RL runs, 100 steps each}}\\
-\texttt{runA} & reward probe, init $C_{\text{outcome}}$ & --- & accuracy $0.236$ \\
-\texttt{runB} $=$ arm C & reward probe, init $C_{\text{SFT}}$ & $0.861$ & accuracy $0.073$ \\
-arm A & surface-\emph{residualised} probe, init $C_{\text{SFT}}$ & $0.834$ & accuracy $0.168$ \\
-arm B & surface features only, init $C_{\text{SFT}}$ & $0.925$ & accuracy $0.000$ \\
+LLM judge & \texttt{Qwen2.5-7B-Instruct}, first-block & $0.785$ & bystander; never optimised against \\
 \bottomrule
 \end{tabular}
-\caption{The entities, once. Where two AUROCs are given they are two fits of the same features under different label rules and splits, and are \emph{not} interchangeable: the reward probe reads $0.810$ on its own protocol and $0.861$ on the population the reward arms share; the surface model reads $0.926$ under the \texttt{GroupKFold} of \S\ref{sec:probe-reader} and $0.925$ as the shipped arm-B artifact under a hash split. Only the bottom block's AUROC column is one common population, and it is the only one we rank.}
+\caption{Where two AUROCs are given they are two fits of the same features under different label rules and splits, and are \emph{not} interchangeable: the reward probe reads $0.810$ on its own protocol and $0.861$ on the population the reward arms share; the surface model reads $0.926$ under the \texttt{GroupKFold} of \S\ref{sec:probe-reader} and $0.925$ as the shipped arm-B artifact. Only the AUROC column of Table~\ref{tab:arms} is one common population, and it is the only one we rank.}
 \label{tab:actors}
 \end{table}
 
-\section{The probe is a genuinely good reader}\label{sec:probe-reader}
+\section{The probe is a good reader}\label{sec:probe-reader}
 
-The probe reads layer-16 activations at the \texttt{</think>} token, the last position before the model commits to an answer. On $C_{\text{outcome}}$ it reaches held-out AUROC $\mathbf{0.982}$.
+A premise, not a contribution: the monitor we go on to misuse is one worth deploying. A trace-final probe on layer-16 \texttt{</think>} states reaches held-out AUROC $\mathbf{0.982}$ on $C_{\text{outcome}}$, and as a best-of-16 selector captures $88.8\%$ of the accuracy gain available to any selector (CI $[78.9\%, 96.5\%]$). Free baselines come close, which matters in \S\ref{sec:surface}: \texttt{</think>} position alone scores $0.915$ and a 39-feature surface model $0.926$, and the probe beats each by $+3.20$\,pp of selection accuracy. It is a good detector that partly rides on a cheap surface correlate, and it is not merely a length detector. Appendix~\ref{app:reader} gives the baselines, the length controls, and what this does and does not license.
 
-An AUROC alone does not tell you whether a monitor is worth having, so we also ask whether it is useful. Sampling 16 answers per prompt and keeping the one the probe scores highest reaches accuracy $0.6700$ on the 406 held-out prompts, against $0.5531$ for picking at random among the same 16 and $0.6847$ for an oracle that takes a correct answer whenever one is present. The probe captures $88.8\%$ of the gain available to any selector at all (prompt-clustered paired bootstrap, CI $[78.9\%, 96.5\%]$). This is a monitor a practitioner would deploy.
-
-\textbf{Cheap baselines come close, and we report them next to it.} The character position of \texttt{</think>}, which costs one regular expression and no forward pass, scores AUROC $0.915$ and selects at $0.6379$. A 39-feature model built only from surface properties of the text scores $0.926$. The probe beats each by $+3.20$\,pp of selection accuracy (CI $[+0.99, +5.42]$; $p = 0.008$ against the position baseline, $p = 0.004$ against the surface model), and by $+0.056$ AUROC.
-
-\textbf{Is the probe just reading trace length?} Partly, and it is worth being exact about how much. A free structural baseline already captures $64\%$ of the headroom, so a lot of what the probe knows is visible in the shape of the text. But length is not all of it. Stratifying by \texttt{</think>} position, the probe still reads $0.939$, against $0.564$ for position alone. The accurate summary is that this is a good detector which partly rides on a cheap surface correlate, and \S\ref{sec:surface} is where that matters.
-
-Two things to flag. A high probe accuracy is not by itself evidence that the model \emph{uses} the direction the probe found \citep{belinkov2022probing}, and we make no causal claim about it here. And answers with no locatable \texttt{</think>} cannot be scored, so they are dropped from every AUROC: $2.9\%$ of answers on $C_{\text{outcome}}$ and $10.4\%$ on $C_{\text{SFT}}$, all of them wrong, which means the filter flatters the weaker model. Layer 16 was fixed in advance from the original study, not chosen here.
-
-\textbf{There are two different probes in this paper.} This is the easiest thing to get wrong in what follows, so we separate them here. The probe described above is the \emph{reader}. It is never used as a reward. The probe used as the RL reward in \S\ref{sec:probe-rl}, and scored at every checkpoint in \S\ref{sec:lag}, is a different fit on temperature-1 samples. Its own held-out AUROC is $\mathbf{0.810}$ under its own label rule and split. The two share a direction at cosine only $0.163$, so they are not near-copies of each other. Everything in \S\ref{sec:lag} concerns the $0.810$ probe.
-
-Ranking the reward probe against the two reward arms of \S\ref{sec:surface} requires scoring it on \emph{their} population. Restricted to the $158$ prompts it was never fit on, it reads $\mathbf{0.861}$, or $0.850$ if we additionally intersect the arms' own held-out half. That is the only figure we use when ranking rewards. The three numbers $0.810$, $0.861$ and $0.982$ are measured on different populations and are not comparable to each other.
-
-One disclosure about the checkpoint ladder: $248$ of this probe's $300$ fitting prompts are among the $406$ used in \S\ref{sec:lag}, so that evaluation is not prompt-disjoint from the fit. The answers are freshly sampled at every checkpoint, and the step-0 reading of $0.783$ sits \emph{below} the held-out $0.810$ rather than above it, which is not what leakage produces. But the populations do overlap and we would rather say so.
+\textbf{There are two different probes in this paper.} The probe above is the \emph{reader} and is never a reward. The probe used as the reward in \S\ref{sec:probe-rl}, and scored at every checkpoint in \S\ref{sec:lag}, is a different fit on temperature-1 samples, with its own held-out AUROC of $\mathbf{0.810}$; they share a direction at cosine only $0.163$. One disclosure: $248$ of its $300$ fitting prompts are among the $406$ evaluated in \S\ref{sec:lag}, so that evaluation is not prompt-disjoint from the fit. Answers are freshly sampled at every checkpoint and its step-0 reading of $0.783$ sits \emph{below} its held-out $0.810$, which is not what leakage produces, but the populations do overlap and we would rather say so.
 
 \section{Using the probe as the reward destroys the task}\label{sec:probe-rl}
 
@@ -125,38 +103,158 @@ We ran this from two different starting points, because where you start turns ou
   \item[\texttt{runB}] Starts from $C_{\text{SFT}}$, so the probe is out-of-distribution at step 0.
 \end{description}
 
-\paragraph{Downstream eval.} On the clean-406 eval set (first-block accuracy), the same population as every other table here:
-\begin{center}
-\small
-\begin{tabular}{lcc}
-\toprule
-Checkpoint & first-block accuracy & vs.\ same-init baseline \\
-\midrule
-$C_{\text{outcome}}$ (vanilla RLOO from $C_{\text{SFT}}$) & $0.550$ & --- \\
-\textbf{probe-RL \texttt{runA}} (from $C_{\text{outcome}}$) & \textbf{0.236} & $-31$\,pp from $C_{\text{outcome}}$ \\
-\textbf{probe-RL \texttt{runB}} (from $C_{\text{SFT}}$, baseline $0.290$) & \textbf{0.073} & $-22$\,pp from $C_{\text{SFT}}$ \\
-\bottomrule
-\end{tabular}
-\end{center}
+\paragraph{Downstream eval.} On the clean-406 set, first-block accuracy: \texttt{runA} falls to $\mathbf{0.236}$, which is $-31$\,pp from $C_{\text{outcome}}$'s $0.550$, and \texttt{runB} to $\mathbf{0.073}$, $-22$\,pp from $C_{\text{SFT}}$'s $0.290$. Both runs reached a probe score of about $0.99$ while doing it, and they got there by opposite routes: \texttt{runA} learned to ramble, \texttt{runB} to commit early.
 
-\paragraph{What the trained policy writes.} We score every answer with a transparent template detector: seven markers such as ``let me'', ``step by step'', ``therefore'', ``the answer is'', verification language, numbered steps and sequential connectives. Between the vanilla checkpoint and \texttt{runB} the average template score rises from $2.00$ to $4.32$ out of 7, and the share of answers scoring at least 3 rises from $15.1\%$ to $100\%$. Over the same span the correlation between template score and actually being correct collapses from $r{=}{+}0.320$ to $+0.025$.
-
-In other words, the answers acquire the form of careful reasoning and lose its content, and the probe goes on scoring them as correct. The two runs did this in opposite ways: \texttt{runA} learned to ramble, \texttt{runB} learned to commit early. Both reached a probe score of about $0.99$.
+\paragraph{What the trained policy writes.} The answers acquire the form of careful reasoning and lose its content. A transparent seven-marker template score rises $2.00 \to 4.32$ between the vanilla checkpoint and \texttt{runB}, while its correlation with actually being correct collapses from $r{=}{+}0.320$ to $+0.025$. The probe goes on scoring them as correct. \S\ref{sec:surface} shows what this looks like verbatim.
 
 \subsection{The probe's own accuracy stays intact for 40 steps after the gaming starts}\label{sec:lag}
 
 Here is the question this section answers. The policy is being trained against the probe and is getting worse at the actual task. If you were watching the probe's accuracy, when would you notice?
 
-We can ask this precisely because the monitor is a correctness probe on a verifiable task, which the reward-model literature cannot do: a reward model would need fresh human preference labels at every checkpoint, whereas we already have the verifier. We take all eleven checkpoints of the probe-as-reward run. At each one we sample 8 fresh answers per prompt \emph{from that checkpoint}, score them with the frozen reward probe, and compare against ground truth. The probe is the only thing held fixed across checkpoints; the answers it is scoring are different every time, because the policy writing them has changed.
+We can ask this precisely because the monitor is a correctness probe on a verifiable task, which the reward-model literature cannot do: a reward model would need fresh human preference labels at every checkpoint, whereas we already have the verifier. We take all eleven checkpoints of the probe-as-reward run. At each one we sample 8 fresh answers per prompt \emph{from that checkpoint}, score them with the frozen reward probe, and compare against ground truth. The probe is the only thing held fixed across checkpoints; the answers it is scoring are different every time, because the policy writing them has changed. Figure~\ref{fig:lag} is the result, and Table~\ref{tab:lag} in Appendix~\ref{app:ladders} gives every checkpoint.
 
-\begin{figure}[h]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.86\linewidth]{figures/lag.pdf}
-\caption{The warning period you do not get. \textbf{Top:} the monitor's mean score climbs and true accuracy falls from step 10 --- the policy is already gaming the monitor throughout the shaded span. \textbf{Bottom:} the monitor's own discrimination, scored at each checkpoint on \emph{that checkpoint's} freshly sampled rollouts, is flat across the same span and only moves at step 50. Band is the across-seed range of the class-balanced AUROC. The verifier-RL control (dashed) \emph{rises} over the same interval, so the decline is specific to the attacked checkpoint and not something training does to a frozen probe.}
+\includegraphics[width=0.82\linewidth]{figures/lag.pdf}
+\caption{The warning you do not get. \textbf{Top:} true accuracy falls from step 10, while the fraction of answers clearing a threshold frozen at step 0 rises. The policy is gaming the monitor throughout the shaded span. \textbf{Bottom:} the monitor's own discrimination over the same span, scored at each checkpoint on that checkpoint's freshly sampled answers, is indistinguishable from where it started until step 50. Both panels and the interval are drawn from the same data as Table~\ref{tab:lag}.}
 \label{fig:lag}
 \end{figure}
 
+\textbf{Part of that flatness is the metric, not the policy.} AUROC depends only on the order the probe puts answers in, and between steps 0 and 40 the mean score inflates $0.460 \to 0.677$ while leaving that order almost intact. The obvious replacements do not rescue you: precision at a frozen threshold is confounded with the falling share of correct answers, and the prevalence-invariant $\mathrm{LR}+$ falls $2.41 \to 1.65$, \emph{more} than raw precision rather than less. Appendix~\ref{app:metrics} works this through.
+
+\textbf{What warns you without labels.} AUROC, precision and $\mathrm{LR}+$ all need to know which answers were correct, and if you had that you could measure the accuracy drop directly. Score \emph{saturation} does not work either: the attacked run has $36.7\%$ of answers above $0.95$ by step 40, but the verifier-RL control reaches $37.2\%$ by step 60 while its accuracy is rising. \textbf{Flag rate does work.} Freeze a threshold and watch what share of answers clear it. Under attack it rises monotonically ($+6\%$, $+12\%$, $+20\%$, $\mathbf{+38\%}$ at steps 10 to 40, eventually $+99\%$) and never returns. Every checkpoint is scored on the same 406 prompts, so the right test is paired, and it fires at the first checkpoint after training begins: $+0.030\,[+0.012,+0.048]$ at \textbf{step 10} ($p=0.001$; one bootstrap draw of 2{,}000 crossed zero), against an AUROC break at step 50. That is a label-free lead of about \textbf{40 steps}, growing to $+0.496$ by step 99.
+
+\textbf{Part of this is definitional and we would rather say so.} The probe's flag rate is the threshold-crossing rate of the probe score, and the probe score \emph{is} the training objective. Gradient ascent pushes it up by construction, so an early departure is partly guaranteed rather than discovered. What is not guaranteed is the \emph{gap}: that the same score can inflate for 40 steps while the ranking it induces stays intact. The clean case is the judge in \S\ref{sec:judge}, which the policy was never trained against and whose flag rate moves anyway. That result is weaker (step 20, $p=0.013$) and it is the one to lean on.
+
+\textbf{The control is the weakest part of this paper.} A paired test against step 0 shows the statistic \emph{moved}, not that it moved more than benign training moves it, and our control ladder for that has four defects, set out in Appendix~\ref{app:metrics}. Two independent routes through it give step 10 and only the contaminated one gives step 30. Read the lead as evidence that the ordering exists, not as a calibrated false-alarm rate; a matched control ladder is the highest-value experiment left undone here.
+
+We claim the RL-training characterisation, not the alarm itself. Watching a score distribution against a frozen reference is standard production monitoring, and \citet{li2026whodrifted} give a better instrument for it: anytime-valid e-processes with an anchor set, which additionally attribute drift to the system or to the judge. What we add is a price, in RLOO steps, for what that alarm buys against a monitor whose AUROC has not moved.
+
+\subsection{Why: a monitor that provably did not change}\label{sec:judge}
+
+\S\ref{sec:lag} leaves an ambiguity we cannot resolve with the probe alone. The probe's AUROC stayed flat while the policy collapsed, but the probe was the training target, so one can always argue the probe did change in some way relative to the answers it was scoring. To separate the monitor from the population we need a monitor that is \emph{incapable} of changing, watching the same collapse. That is what this section is: not a second experiment, but the control that says which of the two moved.
+
+We use an LLM judge, which is also what practitioners actually deploy. We re-sample all eleven checkpoints of the same run (406 prompts $\times$ 8 answers, 35{,}728 in total) and score every answer twice: with the exact verifier, and with \texttt{Qwen2.5-7B-Instruct} shown the problem and the proposed equation and asked whether it is correct. The judge's score is $P(\textsc{yes})$ renormalised over the two verdict tokens. It is genuinely imperfect: at step 0 it reaches precision $0.746$ at its own median threshold against a true accuracy of $0.544$. The policy was never optimised against it.
+
+\textbf{The judge is a fixed function, and we checked.} Of the 965 (problem, equation) pairs it scored more than once, exactly one changes which side of the threshold it falls on, and of the 48 it scored at both step 0 and step 99, none do. Whatever its statistics do below, they are not the judge changing.
+
+\textbf{And its statistics barely move} (Table~\ref{tab:judge}). Paired prompt-clustered bootstraps show a small dip at steps 20--40 ($-0.031$ at step 30, $p = 0.002$) and a recovery by step 80. Between the first and last checkpoints there is no difference: the paired change is $-0.017$, $95\%$ CI $[-0.048, +0.014]$, which bounds any degradation at about $0.05$ rather than merely failing to reject zero. The largest excursion anywhere is $0.031$ of AUROC, arriving while true accuracy falls $0.544 \to 0.457$, and it would not trip any plausible alert. Raw precision does fall, $0.746 \to 0.429$, but the share of answers that are correct falls $0.544 \to 0.226$ over the same span and precision at a fixed threshold moves with that share by construction. The prevalence-invariant statistic, $\mathrm{LR}+ = \mathrm{TPR}/\mathrm{FPR}$, is flat end to end at $\mathbf{2.46 \to 2.57}$. (For the same reason, do not use \emph{lift}: it is not prevalence-invariant, and $\sim$91\% of its apparent improvement here is the confound it appears to remove, with roughly $70\%$ of the flag rate's own movement predicted the same way.) Across 41 paired contrasts, Bonferroni over the ten judge AUROC contrasts leaves only step 30, and the judge's flag-rate departure at step 20 ($p=0.013$) does not survive; both tables report nominal $p$.
+
+\textbf{So the flat AUROC was never a fact about the judge.} Its health was not the variable. What moved was the population it was handed: correct answers fell from $54.4\%$ of the pool to $22.6\%$, illegal ones grew from $28\%$ of the wrong answers to $43\%$, and the surface form changed. The policy stopped using parentheses, the share of correct answers with none rising $0.017 \to 0.982$, and the judge is sensitive to exactly that: on the same expression differing only in bracketing it passes $0.746$ with parentheses and $0.548$ without ($+0.198$, $95\%$ CI $[+0.131, +0.265]$). The judge is riding a surface correlate too. Sensitivity and specificity belong to a classifier \emph{and a population together}, so nothing in a monitor's own label-requiring statistics would have warned you the policy was failing. None of this is new as statistics: it is \emph{spectrum bias}, described for diagnostic tests by \citet{ransohoff1978spectrum} and standard in clinical epidemiology since. What is new here is the setting and the direction of causation. In the clinical case the population varies for reasons outside the test; here the artifact's own deployment is what moves the population, so the number an interpretability paper reports read-only is measured on the one distribution that deploying it destroys.
+
+\textbf{And the label-free statistic moves here too, in the opposite direction.} The flag rate falls $0.500 \to 0.317$, $-37\%$ against AUROC's $-2\%$, departing at step 20 ($-0.026\,[-0.047,-0.007]$, $p=0.013$) though not at step 10 ($p=0.069$), and it is not monotone, bottoming at $0.294$ by step 80 while accuracy still falls. This is the non-circular case: the probe's flag rate is the threshold-crossing rate of the RL objective itself, so its early departure is partly guaranteed, whereas the judge was never optimised against. What to watch is \emph{departure} from the frozen operating point, not a direction. \citet{li2026whodrifted} give a better instrument for that than ours, anytime-valid e-processes with an anchor set; our contribution is the price in RLOO steps, not the alarm.
+
+\textbf{One scope limit.} The judge is a bystander, so this is not a demonstration that a judge can be gamed; \citet{zhou2026convincing}, who optimise against judges directly, report discrimination collapsing (TPR$-$FPR $0.311 \to 0.086$). A bystander judge instead keeps its discrimination while the policy collapses underneath. Neither warns you, and the bystander case is the more common one.
+
+\subsection{How much of this is the policy occupying cheap surface features?}\label{sec:surface}
+
+The probe partly rides on surface properties of the text (\S\ref{sec:probe-reader}). A natural hypothesis is that the collapse happens because the policy learns to manufacture those surface properties. We test the hypothesis in two directions: first with detectors that read nothing but the text, then with reward arms that were pre-registered before we ran them.
+
+\textbf{Then we closed the loop with two pre-registered RL arms}, predictions committed before launch. Arm A borrows the logic of amnesic probing \citep{elazar2021amnesic}, though not its method: we residualise the 39 surface features out of the activations by least squares, refit on what remains, and train against that, which asks whether the collapse needs the surface information the probe rode on. Elazar et al.\ remove a property by iterative nullspace projection and measure the behavioural counterfactual; we remove a hand-specified feature set and measure a downstream training outcome. Both arms use the same recipe as the published run, both initialised from $C_{\text{SFT}}$ and compared against the init-matched run \texttt{runB} at $0.0734$, which we list as arm C. These three are rankable against each other and against nothing else in this paper (Table~\ref{tab:arms}).
+
 \begin{table}[h]
+\centering\small
+\begin{tabular}{llcc}
+\toprule
+Arm & reward & read-only AUROC & first-block acc.\ (vs.\ \texttt{runB}) \\
+\midrule
+A & surface-\emph{residualised} probe & 0.834 & $0.1678$ \ \ ($+9.44$ pp, CI $[+7.67,+11.24]$) \\
+C & the raw probe (\texttt{runB}, reference) & 0.861 & $0.0734$ \ \ (reference) \\
+B & surface features \emph{only} & 0.925 & $\mathbf{0.0000}$ \ \ ($-7.34$ pp, CI $[-8.41,-6.31]$) \\
+\bottomrule
+\end{tabular}
+\caption{The ranking, on one population and one label rule: the clean-406 $C_{\text{outcome}}$ answers, each probe scored only on prompts it was not fit on. Rows are sorted by read-only quality; the accuracy column runs the other way.}
+\label{tab:arms}
+\end{table}
+
+\textbf{Arm B is the sharpest result in the paper.} A reward with no access to the model's internals drove accuracy to exactly zero, and the output is not degenerate: $100\%$ of answers still emit \texttt{</think>} and $99.9\%$ a well-formed \texttt{<answer>} block. Verbatim, for input $[29, 17, 63, 38]$ and target $68$:
+
+\vspace{-0.35em}
+\begin{quote}\ttfamily\small\setlength{\parskip}{0pt}
+<answer>\\
+Let me verify:\\
+1. 17 - 10 = 7\\
+2. 63 - 7 = 56\\
+3. 29 * 38 = 1102\\
+4. 56 - (29 * 38 / 38) = 68\\
+</answer>
+\end{quote}
+\vspace{-0.35em}
+
+Step 1 uses $10$, which was not in the input. Step 3 is correct and irrelevant. Step 4 reuses two numbers and evaluates to 27, while asserting 68 in the answer position. The answer has the shape of careful verification and contains no valid arithmetic. Mean length went from $1{,}098$ to $2{,}390$ characters, because the reward's features \texttt{ans\_len}, \texttt{ans\_ops} and \texttt{n\_equals} pay for exactly that.
+
+Arm A confirmed its pre-registered prediction against the init-matched control, collapsing $9.4$\,pp less than the raw-probe run. Comparing it instead against \texttt{runA}, which starts from $C_{\text{outcome}}$, reverses the sign: initialisation alone is worth about $16$\,pp here, twice the effect being measured, which is why the comparison must match on it.
+
+\paragraph{What this licenses, and what it does not.} It licenses this: occupying cheap textual structure is \emph{sufficient} to destroy both a monitor and the task, with no internal access needed. It does not license the claim that this is \emph{the} mechanism behind the published probe's collapse, and arm A cuts against the simple version of that story.
+
+The prescription is narrower. Before wiring any monitor into a gradient, measure how much of its AUROC survives conditioning on cheap surface features. Ours survives well, holding $0.982 \to 0.939$ under \texttt{</think>}-position stratification, and it collapsed anyway, because the axes the \emph{policy} can reach are the surface ones. The question is not what the monitor can see. It is what the optimizer can reach.
+
+\section{Limitations}
+
+\textbf{Every RL configuration is a single seed}, including the ladder the lag is measured on; our three analysis seeds bound measurement noise, not training variance. These are demonstrations of direction, not estimates of size. Scale runs the unhelpful way: 0.5B throughout, and the 1.5B replication holds as a reader (AUROC $0.974$) while the applied gain \emph{shrinks}, $+8.6$ against $+11.7$\,pp. One task, one model family, one RL algorithm, one bystander judge.
+
+\textbf{No causal experiment, and a withdrawn result.} An earlier version reported that RL renders the probe direction causally active under steering. We do not: the steered vector has cosine $0.163$ with the probe actually optimised rather than the $1.000$ that claim assumed, the intervention landed one transformer block and 2--3 tokens downstream of the read site, and the key contrasts reach only $p=0.063$. Those checkpoints are deleted. A defensible version needs interventions aligned to the read site, evaluated as a causal abstraction \citep{geiger2021abstractions}.
+
+\textbf{Reproducibility.} Every number regenerates on CPU from cached artifacts. One script prints each published value beside its recomputation, covering this paper's prose, its tables and the three AUROCs the ranking depends on, and exits non-zero on disagreement. Code and cached activations will be released on acceptance; they are omitted here only because a repository link would deanonymise us.
+
+\begin{thebibliography}{99}
+\bibitem[Gandhi et al.(2024)]{gandhi2024stream} Gandhi, K., et al.\ Stream of search (SoS): Learning to search in language. arXiv:2404.03683, 2024.
+\bibitem[Ahmadian et al.(2024)]{ahmadian2024back} Ahmadian, A., et al.\ Back to basics: Revisiting REINFORCE-style optimization for learning from human feedback in LLMs. ACL 2024.
+\bibitem[Arditi et al.(2024)]{arditi2024refusal} Arditi, A., et al.\ Refusal in language models is mediated by a single direction. NeurIPS, 2024.
+\bibitem[Burns et al.(2023)]{burns2022discovering} Burns, C., et al.\ Discovering latent knowledge in language models without supervision. ICLR, arXiv:2212.03827, 2023.
+\bibitem[Pacchiardi et al.(2024)]{pacchiardi2023lie} Pacchiardi, L., et al.\ How to catch an AI liar: Lie detection in black-box LLMs by asking unrelated questions. ICLR, 2024.
+\bibitem[Gao et al.(2023)]{gao2023scaling} Gao, L., Schulman, J., Hilton, J.\ Scaling laws for reward model overoptimization. ICML, 2023.
+\bibitem[Coste et al.(2024)]{coste2023reward} Coste, T., et al.\ Reward model ensembles help mitigate overoptimization. ICLR, 2024.
+\bibitem[Skalse et al.(2022)]{skalse2022defining} Skalse, J., et al.\ Defining and characterizing reward hacking. NeurIPS, 2022.
+\bibitem[Denison et al.(2024)]{denison2024sycophancy} Denison, C., et al.\ Sycophancy to subterfuge: Investigating reward-tampering in large language models. arXiv:2406.10162, 2024.
+\bibitem[Baker et al.(2025)]{baker2025monitoring} Baker, B., et al.\ Monitoring reasoning models for misbehavior and the risks of promoting obfuscation. arXiv:2503.11926, 2025.
+\bibitem[Gupta and Jenner(2025)]{gupta2025rlobfuscation} Gupta, R.\ and Jenner, E.\ RL-Obfuscation: Can language models learn to evade latent-space monitors? arXiv:2506.14261, 2025.
+\bibitem[Taufeeque et al.(2026)]{taufeeque2026atlas} Taufeeque, M., Heimersheim, S., Gleave, A., and Cundy, C.\ The obfuscation atlas. ICML (Oral), arXiv:2602.15515, 2026.
+\bibitem[Ransohoff and Feinstein(1978)]{ransohoff1978spectrum} Ransohoff, D.\ F.\ and Feinstein, A.\ R.\ Problems of spectrum and bias in evaluating the efficacy of diagnostic tests. \emph{New England Journal of Medicine}, 299(17):926--930, 1978.
+\bibitem[Belinkov(2022)]{belinkov2022probing} Belinkov, Y.\ Probing classifiers: Promises, shortcomings, and advances. \emph{Computational Linguistics}, 48(1):207--219, 2022.
+\bibitem[Hewitt and Liang(2019)]{hewitt2019control} Hewitt, J.\ and Liang, P.\ Designing and interpreting probes with control tasks. EMNLP, arXiv:1909.03368, 2019.
+\bibitem[Voita and Titov(2020)]{voita2020mdl} Voita, E.\ and Titov, I.\ Information-theoretic probing with minimum description length. EMNLP, pp.\ 183--196, arXiv:2003.12298, 2020.
+\bibitem[Elazar et al.(2021)]{elazar2021amnesic} Elazar, Y., Ravfogel, S., Jacovi, A., and Goldberg, Y.\ Amnesic probing: Behavioral explanation with amnesic counterfactuals. \emph{TACL}, arXiv:2006.00995, 2021.
+\bibitem[Geiger et al.(2021)]{geiger2021abstractions} Geiger, A., Lu, H., Icard, T., and Potts, C.\ Causal abstractions of neural networks. NeurIPS, arXiv:2106.02997, 2021.
+
+\bibitem[Zheng et al.(2023)]{zheng2023judging} Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E.\ P., Zhang, H., Gonzalez, J.\ E., and Stoica, I. Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. NeurIPS, arXiv:2306.05685, 2023.
+\bibitem[Frick et al.(2024)]{frick2024ppe} Frick, E., Li, T., Chen, C., Chiang, W.-L., Angelopoulos, A.\ N., Jiao, J., Zhu, B., Gonzalez, J.\ E., and Stoica, I. How to evaluate reward models for RLHF. arXiv:2410.14872, 2024.
+\bibitem[Malik et al.(2025)]{malik2025rewardbench2} Malik, S., Pyatkin, V., Land, S., Morrison, J., Smith, N.\ A., Hajishirzi, H., and Lambert, N. RewardBench 2: Advancing reward model evaluation. arXiv:2506.01937, 2025.
+\bibitem[Norman et al.(2026)]{norman2026reliability} Norman, J.\ D., Rivera, M.\ U., and Hughes, D.\ A. Reliability without validity: A systematic, large-scale evaluation of LLM-as-a-judge models across agreement, consistency, and bias. arXiv:2606.19544, 2026.
+\bibitem[Weng et al.(2026)]{weng2026invariance} Weng, S., Feng, Y., and Xie, X. Beyond accuracy: Policy invariance as a reliability test for LLM safety judges. arXiv:2605.06161, 2026.
+\bibitem[Yang et al.(2026)]{yang2026auditing} Yang, Z., Hou, Y., and Yang, X. When the judge changes, so does the measurement: Auditing LLM-as-judge reliability. arXiv:2607.08535, 2026.
+\bibitem[Zhou(2026)]{zhou2026convincing} Zhou, C. More convincing, not more correct: Self-play reward hacking of reference-free LLM judges. arXiv:2607.05904, 2026.
+\bibitem[Li(2026)]{li2026whodrifted} Li, Y. Who drifted: the system or the judge? Anytime-valid attribution in LLM evaluation pipelines. arXiv:2606.15474, 2026.
+\bibitem[Beigi et al.(2026)]{beigi2026prime} Beigi, M., Jin, M., and Huang, L. Proxy reward internalization and mechanistic exploitation: A learned precursor to reward hacking and its generalization. arXiv:2606.09711, 2026.
+\bibitem[Bailey et al.(2024)]{bailey2024obfuscated} Bailey, L., et al.\ Obfuscated activations bypass LLM latent-space defenses. arXiv:2412.09565, 2024.
+\end{thebibliography}
+
+\appendix
+\section{Statistical choices, and the control ladder}\label{app:metrics}
+
+\textbf{Why AUROC stays flat: partly the policy, partly the metric.} AUROC depends only on the order the probe puts answers in. Between steps 0 and 40 the mean score inflates $0.460 \to 0.677$ while leaving that order almost intact, which is close to a pure recalibration, so ``AUROC stayed flat'' is partly a fact about the metric and about every rank-based statistic. The obvious replacement is worse. Precision at a frozen threshold falls $0.588 \to 0.416$ ($-29.3\%$), but the share of answers that are correct falls too, and precision moves with it whether or not the probe changed. The prevalence-invariant statistic is $\mathrm{LR}+ = \mathrm{TPR}/\mathrm{FPR}$, and it falls $2.41 \to 1.65$, or $\mathbf{-31.5\%}$: slightly more than raw precision, not less. Measured against its above-chance margin, AUROC moves $-5.1\%$. We use $\mathrm{LR}+$ and not \emph{lift} for the reason \S\ref{sec:judge} gives; lift moves only $-12.8\%$ here.
+
+\textbf{The control is the weakest part of this paper.} A paired test against step 0 shows the statistic \emph{moved}, not that it moved more than benign training moves it. That needs a control ladder of ordinary runs, and ours is poor: five checkpoints, the wrong initialisation, no recorded sampling configuration, and three of its five checkpoints scored on 166--167 prompts where every attacked checkpoint uses all 406. That last defect drives the number. The largest swing the control shows gives a benign band of $\pm 18.6\%$, and the checkpoint setting it is exactly the one where the population changes; restricting to the two checkpoints scored on all 406 gives $\pm 5.1\%$, which the attacked run leaves at step 10. Both routes agree on step 10 and only the contaminated one gives 30. Read the lead as evidence that the ordering exists, not as a calibrated false-alarm rate. A matched control ladder is the highest-value experiment left undone here.
+
+\section{Setup detail}\label{app:setup}
+
+$C_{\text{SFT}}$ is \texttt{asingh15/qwen-sft-countdown-defaultproj}, a public checkpoint we did not train. $C_{\text{outcome}}$ is 100 RLOO \citep{ahmadian2024back} steps with the verifier reward at batch 128, KL $10^{-3}$, lr $10^{-5}$. The verifier returns $\{0, 0.1, 1.0\}$. Eval is 500 procedurally generated problems filtered to the 406 with no overlap against the RLOO training pool.
+
+Probes are L2-regularized logistic regression at layer 16, 5-fold \texttt{GroupKFold} on prompt, class-balanced. One estimator throughout: cross-validate, then balance, held out by prompt. Where an in-sample figure exists we do not quote it; the trace-final probe reads $0.995$ in-sample against $0.982$ held out.
+
+\section{The reader probe in full}\label{app:reader}
+
+As a best-of-16 selector on 406 held-out prompts the probe reaches $0.6700$, against $0.5531$ for picking at random among the same 16 and $0.6847$ for an oracle that takes a correct answer whenever one is present; that is $88.8\%$ of the available gain (prompt-clustered paired bootstrap, CI $[78.9\%, 96.5\%]$). The margin over the free baselines is $+3.20$\,pp of selection accuracy (CI $[+0.99, +5.42]$, $p = 0.008$ against \texttt{</think>} position and $p = 0.004$ against the 39-feature surface model), and $+0.056$ AUROC. That margin, not the raw $0.982$, is the number to read. This is a baseline comparison, not the control-task selectivity of \citet{hewitt2019control}, which would require refitting against randomised labels; we did not run that.
+
+On length specifically: stratified by \texttt{</think>} position the probe still reads $0.939$, against $0.564$ for position alone, so it is not a length detector, though a free structural baseline already captures $64\%$ of the headroom.
+
+Two limits on what any of this licenses. High probe accuracy is not evidence that the model \emph{uses} the direction \citep{belinkov2022probing}, and accuracy is a lossy summary of what a probe extracted \citep{voita2020mdl}; we make no causal claim. Answers with no locatable \texttt{</think>} are unscoreable and dropped from every AUROC in this section ($2.9\%$ on $C_{\text{outcome}}$, $10.4\%$ on $C_{\text{SFT}}$, all wrong, so the filter flatters the weaker model). It does not touch the checkpoint ladder of \S\ref{sec:lag}: activations there are captured at a fixed pre-answer position for every rollout, and all eleven checkpoints score $3{,}216$--$3{,}248$ of $3{,}248$, so no varying filter is available to explain the flat AUROC. Layer 16 was fixed in advance from the original study.
+
+\section{Full checkpoint ladders}\label{app:ladders}
+
+Every checkpoint of both series, with prompt-clustered bootstrap intervals. The body quotes the load-bearing values from these tables; they are reproduced whole here because both series are non-monotone and a selected subset would misrepresent them.
+
+\begin{table}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -180,31 +278,8 @@ RLOO step & \textbf{probe AUROC} [95\% CI] & vs.\ step 0 ($p$) & prec @ $T$ & \t
 \end{tabular}
 \caption{Reward hacking and monitor failure are separated by $\sim$40 RLOO steps. Intervals are a prompt-clustered bootstrap over the 406 eval prompts (2{,}000 resamples) computed from per-rollout probe scores on each checkpoint's own cached activations.}\label{tab:lag}
 \end{table}
-\textbf{Why AUROC stays flat: partly the policy, partly the metric.} AUROC only depends on the order the probe puts answers in, not on the scores themselves. Between steps 0 and 40 the probe's mean score inflates from $0.460$ to $0.677$ while leaving that order almost intact, which is close to a pure recalibration. So ``AUROC stayed flat'' is partly a fact about the metric, and the same applies to every rank-based statistic, including TPR at a fixed FPR.
 
-The obvious replacement is worse. Precision at a frozen threshold falls $0.588 \to 0.416$, or $-29.3\%$, but the fraction of answers that are actually correct falls over the same span, and precision at a fixed threshold moves with that fraction whether or not the probe changed. The statistic that does not move with it is the positive likelihood ratio, $\mathrm{LR}+ = \mathrm{TPR}/\mathrm{FPR}$, and it falls $2.41 \to 1.65$, or $\mathbf{-31.5\%}$: slightly more than raw precision, not less. We use $\mathrm{LR}+$ and not \emph{lift} for the reason \S\ref{sec:judge} sets out. Lift is not prevalence-invariant, and on this series it moves only $-12.8\%$. Measured against its above-chance margin, AUROC moves $-5.1\%$.
-
-\textbf{What warns you without labels.} AUROC, precision and $\mathrm{LR}+$ all need to know which answers were correct. If you had that, you could simply measure the accuracy drop, which is louder than any of them. The question worth asking is what moves when you have no labels at all.
-
-Score \emph{saturation} does not work: the attacked run has $36.7\%$ of answers above $0.95$ by step 40, but the verifier-RL control reaches $37.2\%$ by step 60 while its accuracy is rising. \textbf{Flag rate does work.} Freeze a threshold at the start and watch what share of answers clear it. Under attack it rises monotonically ($+6\%$, $+12\%$, $+20\%$, $\mathbf{+38\%}$ at steps 10 to 40, eventually $+99\%$) and never comes back. Because every checkpoint is scored on the same 406 prompts, the right test is a paired one, and it fires at the very first checkpoint after training begins: $+0.030\,[+0.012,+0.048]$ at \textbf{step 10} ($p=0.001$; one bootstrap draw of 2{,}000 crossed zero), against an AUROC break at step 50. That is a label-free lead of about \textbf{40 steps}, and every later checkpoint is significant too, growing to $+0.496$ by step 99.
-
-\textbf{Part of this is definitional and we would rather say so.} The probe's flag rate is the threshold-crossing rate of the probe score, and the probe score \emph{is} the training objective. Gradient ascent pushes it up by construction, so an early departure is partly guaranteed rather than discovered. What is not guaranteed is the \emph{gap}: that the same score can inflate for 40 steps while the ranking it induces stays intact. The clean case is the judge in \S\ref{sec:judge}, which the policy was never trained against and whose flag rate moves anyway. That result is weaker (step 20, $p=0.013$) and it is the one to lean on.
-
-\textbf{The control is the weakest part of this paper.} A paired test against step 0 shows the statistic \emph{moved}, not that it moved more than benign training moves it. That needs a control ladder, and ours is poor: five checkpoints; initialised from $C_{\mathrm{SFT}}$ rather than $C_{\text{outcome}}$, the mismatch we insist on elsewhere; no sampling configuration in its manifest, having been ingested from earlier evaluations rather than harvested by the pipeline that produced the attacked ladder; and three of its five checkpoints scored on 166--167 prompts where every attacked checkpoint uses all 406.
-
-That last defect drives the number. The largest flag-rate swing the control exhibits gives a benign band of $\pm 18.6\%$, and the checkpoint setting it is exactly the one where the prompt population changes. Restricting to the two checkpoints scored on all 406 gives $\pm 5.1\%$, which the attacked run leaves at step 10. Both routes agree on step 10; only the contaminated band gives step 30. Read the lead as evidence that the ordering exists, not as a calibrated false-alarm rate. A properly matched control ladder is the highest-value experiment left undone here.
-
-We claim the RL-training characterisation, not the alarm itself. Watching a score distribution against a frozen reference is standard production monitoring, and \citet{li2026whodrifted} give a better instrument for it: anytime-valid e-processes with an anchor set, which additionally attribute drift to the system or to the judge. What we add is a price, in RLOO steps, for what that alarm buys against a monitor whose AUROC has not moved.
-
-\subsection{The same measurement on a real LLM judge}\label{sec:judge}
-
-The monitor so far has been a linear probe. A reader at this venue should want to know whether any of this survives contact with the thing people actually deploy, so we repeat the measurement with an LLM judge and change nothing else.
-
-We re-sample all eleven checkpoints of the same run (406 prompts $\times$ 8 answers, 35{,}728 answers in total) and score every answer twice: once with the exact verifier, and once with \texttt{Qwen2.5-7B-Instruct}, which is shown the problem and the proposed equation and asked whether it is correct. The judge's score is $P(\textsc{yes})$ renormalised over the two verdict tokens. It is a genuinely imperfect judge. At step 0 it achieves precision $0.746$ at its own median threshold against a true accuracy of $0.544$. That is the point: this is what a deployed evaluator looks like.
-
-\textbf{Read this section knowing that the judge never changes.} It is a fixed function, and we checked. Of the 965 (problem, equation) pairs it scored more than once, exactly one changes which side of the threshold it falls on, and of the 48 it scored at both step 0 and step 99, none do. So nothing below is a story about a judge decaying. What changes is the population of answers the judge is handed, and the interesting result is how little its own statistics react to that.
-
-\begin{table}[h]
+\begin{table}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -229,122 +304,4 @@ RLOO step & \textbf{judge AUROC} [95\% CI] & vs.\ step 0 ($p$) & prec @ $T$ & \t
 \caption{An LLM judge watching the same collapse. Its AUROC dips at steps 20--40 and recovers; its positive likelihood ratio LR$+$ tracks the same shape and ends where it began, so the operating point does not degrade. Prompt-clustered bootstrap over the 406 eval prompts, 2{,}000 resamples; $p$ from paired differences against step 0.}
 \label{tab:judge}
 \end{table}
-
-\textbf{The judge's AUROC dips and recovers, and end to end it does not move} (Table~\ref{tab:judge}). Every checkpoint is scored on the same 406 prompts, so the right test is a paired one. There is a small but real dip at steps 20--40 ($-0.031$ at step 30, $p = 0.002$) and a recovery by step 80 ($+0.038$ from step 30, $p = 0.012$; steps 30 and 80 are the observed minimum and maximum, so we report that contrast as exploratory). Between the first and last checkpoints there is no difference: the paired change is $-0.017$ with $95\%$ CI $[-0.048, +0.014]$, which bounds any degradation at about $0.05$ rather than merely failing to reject zero ($p=0.31$). The series is U-shaped, so quoting first-versus-last alone would be reading the least sensitive contrast off a curve; we give all eleven checkpoints. The largest excursion anywhere is $0.031$ of AUROC, and it happens while true accuracy is falling $0.544 \to 0.457$. It would not trip any plausible alert.
-
-\textbf{The test family.} We tabulate 41 paired contrasts against step 0 across both evaluators: ten AUROC and ten flag-rate contrasts each, plus the selected $(30,80)$ contrast. Under Bonferroni over the ten judge AUROC contrasts ($\alpha=0.005$) only step 30 survives, and the judge's flag-rate departure at step 20 ($p=0.013$) does not. The probe's step-10 departure survives that correction, but at $p=0.001$ against a full-family $\alpha$ of $0.0012$ it is at the resolution limit of a 2{,}000-draw bootstrap. Both tables report nominal $p$.
-
-\textbf{Its operating point does not degrade at all, once prevalence is taken out.} Raw precision at a threshold frozen on the step-0 distribution falls $0.746 \to 0.429$, which looks like a $42\%$ collapse. But the share of answers that are actually correct falls $0.544 \to 0.226$ over the same span, and precision at a fixed threshold moves with that share by construction. The statistic that does not is the positive likelihood ratio $\mathrm{LR}+ = \mathrm{TPR}/\mathrm{FPR}$, which is flat end to end at $\mathbf{2.46 \to 2.57}$, with the same shallow mid-training dip as AUROC ($2.22$ at step 30). This is standard diagnostic-test reasoning: a likelihood ratio is a property of the test, where a predictive value is a property of the test and the population together.
-
-\textbf{One trap, which we fell into first.} \emph{Lift}, meaning precision divided by the base rate, looks like the prevalence correction to reach for and is \textbf{not} prevalence-invariant, because $\mathrm{lift}=\mathrm{TPR}/[b\,\mathrm{TPR}+(1{-}b)\mathrm{FPR}]$. Hold this judge's step-0 TPR and FPR fixed and move only the base rate $0.544 \to 0.226$: that alone predicts lift rising $1.37 \to 1.85$, against $1.90$ observed. So lift's apparent $38\%$ ``improvement'' is $\sim$91\% the very confound it appears to remove, and roughly $70\%$ of the flag rate's own movement is predicted by prevalence in the same way. We report this because we made the mistake ourselves, and because it has the same shape as what \citet{norman2026reliability} document at scale: exact-match agreement flatters a judge, and the chance-corrected version deflates by as much as 33--41\,pp. A base-rate correction that changes the sign of an evaluator's apparent trend is not a quirk of our setup.
-
-\textbf{So what actually happened.} The judge did not get better or worse, because it could not. What moved was the population. Correct answers fell from $54.4\%$ of the pool to $22.6\%$, and illegal ones grew from $28\%$ of the wrong answers to $43\%$. The answers also changed in surface form: the policy stopped using parentheses, with the share of correct answers containing none rising $0.017 \to 0.982$. That matters because the judge is sensitive to it. On the same expression differing only in bracketing, the judge passes $0.746$ with parentheses against $0.548$ without ($+0.198$, $95\%$ CI $[+0.131, +0.265]$). This is the paper's own thesis turned back on the judge: it is riding a surface correlate too.
-
-The consequence should worry a practitioner. The per-answer rates in Table~\ref{tab:errors} move because the answers changed, not because the judge did. Sensitivity and specificity belong to a classifier \emph{and a population together}, so a flat AUROC here is not evidence the judge is healthy: its health was never the variable. Nothing in its own label-requiring statistics would have told you the policy was failing.
-
-\begin{table}[h]
-\centering
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{0.85}
-\begin{tabular}{lcccccc}
-\toprule
- & \multicolumn{3}{c}{\textbf{share of answers}} & \multicolumn{3}{c}{\textbf{judge passes them}} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}
-what the model produced & step 0 & step 50 & step 99 & step 0 & step 50 & step 99 \\
-\midrule
-correct                        & 0.544 & 0.399 & \textbf{0.226} & 0.686 & 0.590 & 0.600 \\
-legal equation, wrong value    & 0.294 & 0.316 & 0.442 & 0.408 & 0.412 & \textbf{0.399} \\
-uses numbers it was not given  & 0.129 & 0.284 & 0.330 & 0.057 & 0.025 & 0.013 \\
-\bottomrule
-\end{tabular}
-\caption{What the judge was shown, and how it responded. The left half is the mix of answers; the right half is the judge's pass rate on each kind. The judge itself is a fixed function, so the right-hand movement reflects the answers changing form, not the judge changing. A fourth bucket, answers with no parseable equation, is always rejected and shrinks $3.3\% \to 0.2\%$; it is omitted, so the shares sum to under one.}
-\label{tab:errors}
-\end{table}
-
-\textbf{Again, the label-free statistic is the one that moves.} AUROC and precision both need to know which answers were correct, and with that you could measure the accuracy drop directly. The flag rate needs nothing: it falls $0.500 \to 0.317$, a $-37\%$ move against AUROC's $-2\%$. It departs significantly at step 20 ($-0.026\,[-0.047,-0.007]$, $p=0.013$), though not yet at step 10 ($p=0.069$), and it is not monotone, bottoming at $0.294$ by step 80 and drifting back to $0.317$ while accuracy is still falling. Note that the sign is the opposite of the probe's. What to watch for is departure from the frozen operating point, not a direction.
-
-\textbf{Two limits on what this shows.} First, the judge is a \emph{bystander}: the policy was optimised against the probe, never the judge, so this is not a demonstration that a judge can be gamed. The contrast is instructive. \citet{zhou2026convincing} optimise \emph{against} reference-free judges and report pass rate climbing $0.72 \to 0.94$ while true accuracy stays at $0.20$, with even a three-judge ensemble's TPR$-$FPR collapsing $0.311 \to 0.086$. A judge under direct optimisation loses discrimination; a bystander keeps it while the policy collapses underneath. Neither warns you, but only one is an evasion story, and the bystander case is the more common one.
-
-Second, the two series use different label conventions: the probe is scored against last-block correctness, the label it was fit on, and the judge against the first answer block, which is what it is shown. Each is correct on its own terms, but they are not a like-for-like overlay. Nothing above depends on that comparison.
-
-\subsection{How much of this is the policy occupying cheap surface features?}\label{sec:surface}
-
-The probe partly rides on surface properties of the text (\S\ref{sec:probe-reader}). A natural hypothesis is that the collapse happens because the policy learns to manufacture those surface properties. We test the hypothesis in two directions: first with detectors that read nothing but the text, then with reward arms that were pre-registered before we ran them.
-
-\textbf{Detectors with no access to the model reproduce the failure.} A frozen detector reading only the character position of \texttt{</think>}, with its threshold set on correct baseline answers and never refit, loses almost all its precision on the attacked policy ($83.1\% \to 16.0\%$) while flagging an essentially unchanged share of answers ($30.1\% \to 29.7\%$). A seven-feature text-only logistic regression, also frozen on the baseline, reproduces the probe's whole signature: its mean $P(\text{correct})$ rises $0.506 \to 0.832$ while true accuracy falls $0.517 \to 0.130$. A monitor with no access to the model's internals inherits the failure.
-
-\textbf{Then we closed the loop with two pre-registered RL arms}, predictions committed before launch, same recipe as the published run, both initialised from $C_{\text{SFT}}$ and compared against the init-matched run \texttt{runB} at $0.0734$, which we list as arm C. \textbf{The AUROC column is one population and one label rule} --- the clean-406 $C_{\text{outcome}}$ answers, each probe scored only on prompts it was not fit on --- so these three are rankable against each other and against nothing else in this paper. Rows are sorted by read-only quality, and the accuracy column runs the other way:
-
-\begin{center}\small
-\begin{tabular}{llcc}
-\toprule
-Arm & reward & read-only AUROC & first-block acc.\ (vs.\ \texttt{runB}) \\
-\midrule
-A & surface-\emph{residualised} probe & 0.834 & $0.1678$ \ \ ($+9.44$ pp, CI $[+7.67,+11.24]$) \\
-C & the raw probe (\texttt{runB}, reference) & 0.861 & $0.0734$ \ \ (reference) \\
-B & surface features \emph{only} & 0.925 & $\mathbf{0.0000}$ \ \ ($-7.34$ pp, CI $[-8.41,-6.31]$) \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{Arm B is the sharpest result in the paper.} A reward with no access to the model's internals whatsoever drove accuracy to exactly zero. What makes it informative is that the output is not degenerate: $100\%$ of answers still emit \texttt{</think>} and $99.9\%$ a well-formed \texttt{<answer>} block. Verbatim, for input $[29, 17, 63, 38]$ and target $68$:
-
-\begin{quote}\ttfamily\small
-<answer>\\
-Let me verify:\\
-1. 17 - 10 = 7\\
-2. 63 - 7 = 56\\
-3. 29 * 38 = 1102\\
-4. 56 - (29 * 38 / 38) = 68\\
-</answer>
-\end{quote}
-
-Step 1 uses $10$, which was not in the input. Step 3 is correct and irrelevant. Step 4 reuses two numbers and evaluates to 27, while asserting 68 in the answer position. The answer has the shape of careful verification and contains no valid arithmetic. Mean length went from $1{,}098$ to $2{,}390$ characters, because the reward's features \texttt{ans\_len}, \texttt{ans\_ops} and \texttt{n\_equals} pay for exactly that.
-
-Arm A confirmed its pre-registered prediction against the init-matched control, collapsing $9.4$\,pp less than the raw-probe run. Comparing it instead against \texttt{runA}, which starts from $C_{\text{outcome}}$, reverses the sign: initialisation alone is worth about $16$\,pp here, twice the effect being measured, which is why the comparison must match on it.
-
-\paragraph{What this licenses, and what it does not.} It licenses this: occupying cheap textual structure is \emph{sufficient} to destroy both a monitor and the task, with no internal access needed. It does not license the claim that this is \emph{the} mechanism behind the published probe's collapse, and arm A cuts against the simple version of that story.
-
-The useful prescription is narrower. Before wiring any monitor into a gradient, measure how much of its AUROC survives conditioning on cheap surface features. Ours survives well, holding $0.982 \to 0.939$ under \texttt{</think>}-position stratification, so it carries real signal beyond the surface. And it collapsed anyway, because the axes the \emph{policy} can reach are the surface ones. Read-only quality is necessary and not sufficient. The question is not what the monitor can see. It is what the optimizer can reach.
-
-\section{Limitations}
-
-\textbf{Every RL configuration is a single seed}, including the ladder the lag is measured on. Our three analysis seeds bound measurement noise, not training variance. These are demonstrations that an effect has a direction, not estimates of its size.
-
-\textbf{Scale, and in the unhelpful direction.} 0.5B throughout; the 1.5B replication holds as a reader (AUROC $0.974$) but the applied gain \emph{shrinks}, $+8.6$ against $+11.7$\,pp. One task, one model family, one RL algorithm, one bystander judge.
-
-\textbf{A withdrawn result, and why there is no causal experiment here.} An earlier version reported that RL renders the probe direction causally active under activation steering. We do not. The steered vector has cosine $0.163$ with the probe actually optimised rather than the $1.000$ that claim assumed, the intervention landed one transformer block and 2--3 tokens downstream of the read site, and the key contrasts reach only $p=0.063$. Those checkpoints are deleted.
-
-\textbf{Reproducibility.} Every number regenerates on CPU from released artifacts; one script prints each published value beside its recomputation, covering this paper's prose, both tables and the three AUROCs the ranking depends on, and exits non-zero on disagreement.
-
-\begin{thebibliography}{99}
-\bibitem[Gandhi et al.(2024)]{gandhi2024stream} Gandhi, K., et al.\ Stream of search: Learning to search in language. 2024.
-\bibitem[Ahmadian et al.(2024)]{ahmadian2024back} Ahmadian, A., et al.\ Back to basics: Revisiting REINFORCE-style optimization for learning from human feedback in LLMs. ACL 2024.
-\bibitem[Arditi et al.(2024)]{arditi2024refusal} Arditi, A., et al.\ Refusal in language models is mediated by a single direction. NeurIPS, 2024.
-\bibitem[Burns et al.(2023)]{burns2022discovering} Burns, C., et al.\ Discovering latent knowledge in language models without supervision. ICLR, 2023.
-\bibitem[Pacchiardi et al.(2024)]{pacchiardi2023lie} Pacchiardi, L., et al.\ How to catch an AI liar: Lie detection in black-box LLMs by asking unrelated questions. ICLR, 2024.
-\bibitem[Gao et al.(2023)]{gao2023scaling} Gao, L., Schulman, J., Hilton, J.\ Scaling laws for reward model overoptimization. ICML, 2023.
-\bibitem[Coste et al.(2024)]{coste2023reward} Coste, T., et al.\ Reward model ensembles help mitigate overoptimization. ICLR, 2024.
-\bibitem[Skalse et al.(2022)]{skalse2022defining} Skalse, J., et al.\ Defining and characterizing reward hacking. NeurIPS, 2022.
-\bibitem[Denison et al.(2024)]{denison2024sycophancy} Denison, C., et al.\ Sycophancy to subterfuge: Investigating reward-tampering in large language models. arXiv:2406.10162, 2024.
-\bibitem[Baker et al.(2025)]{baker2025monitoring} Baker, B., et al.\ Monitoring reasoning models for misbehavior and the risks of promoting obfuscation. arXiv:2503.11926, 2025.
-\bibitem[Gupta and Jenner(2025)]{gupta2025rlobfuscation} Gupta, R.\ and Jenner, E.\ RL-Obfuscation: Can language models learn to evade latent-space monitors? arXiv:2506.14261, 2025.
-\bibitem[Taufeeque et al.(2026)]{taufeeque2026atlas} Taufeeque, M., Heimersheim, S., Gleave, A., and Cundy, C.\ The obfuscation atlas. ICML (Oral), arXiv:2602.15515, 2026.
-\bibitem[Belinkov(2022)]{belinkov2022probing} Belinkov, Y.\ Probing classifiers: Promises, shortcomings, and advances. \emph{Computational Linguistics}, 48(1):207--219, 2022.
-
-
-
-\bibitem[Zheng et al.(2023)]{zheng2023judging} Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E.\ P., Zhang, H., Gonzalez, J.\ E., and Stoica, I. Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. NeurIPS, arXiv:2306.05685, 2023.
-\bibitem[Frick et al.(2024)]{frick2024ppe} Frick, E., Li, T., Chen, C., Chiang, W.-L., Angelopoulos, A.\ N., Jiao, J., Zhu, B., Gonzalez, J.\ E., and Stoica, I. How to evaluate reward models for RLHF. arXiv:2410.14872, 2024.
-\bibitem[Malik et al.(2025)]{malik2025rewardbench2} Malik, S., Pyatkin, V., Land, S., Morrison, J., Smith, N.\ A., Hajishirzi, H., and Lambert, N. RewardBench 2: Advancing reward model evaluation. arXiv:2506.01937, 2025.
-\bibitem[Norman et al.(2026)]{norman2026reliability} Norman, J.\ D., Rivera, M.\ U., and Hughes, D.\ A. Reliability without validity: A systematic, large-scale evaluation of LLM-as-a-judge models across agreement, consistency, and bias. arXiv:2606.19544, 2026.
-\bibitem[Weng et al.(2026)]{weng2026invariance} Weng, S., Feng, Y., and Xie, X. Beyond accuracy: Policy invariance as a reliability test for LLM safety judges. arXiv:2605.06161, 2026.
-\bibitem[Yang et al.(2026)]{yang2026auditing} Yang, Z., Hou, Y., and Yang, X. When the judge changes, so does the measurement: Auditing LLM-as-judge reliability. arXiv:2607.08535, 2026.
-\bibitem[Zhou(2026)]{zhou2026convincing} Zhou, C. More convincing, not more correct: Self-play reward hacking of reference-free LLM judges. arXiv:2607.05904, 2026.
-\bibitem[Li(2026)]{li2026whodrifted} Li, Y. Who drifted: the system or the judge? Anytime-valid attribution in LLM evaluation pipelines. arXiv:2606.15474, 2026.
-\bibitem[Beigi et al.(2026)]{beigi2026prime} Beigi, M., Jin, M., and Huang, L. Proxy reward internalization and mechanistic exploitation: A learned precursor to reward hacking and its generalization. arXiv:2606.09711, 2026.
-\bibitem[Bailey et al.(2024)]{bailey2024obfuscated} Bailey, L., et al.\ Obfuscated activations bypass LLM latent-space defenses. 2024.
-\end{thebibliography}
-
 \end{document}

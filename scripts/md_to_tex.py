@@ -55,7 +55,10 @@ def tex_to_md(tex: str) -> str:
         body = body.replace(blk, "{{TABLE:" + lab + "}}")
     body = re.sub(r"\\begin\{abstract\}(.*?)\\end\{abstract\}",
                   lambda m: "## Abstract\n\n" + m.group(1).strip(), body, flags=re.S)
-    body = re.sub(r"\\section\*?\{([^}]*)\}(?:\\label\{[^}]*\})?", r"## \1\n", body)
+    # Keep the \label: dropping it silently breaks every \S\ref in the paper,
+    # and the breakage is invisible until you read the built PDF.
+    body = re.sub(r"\\section\*?\{([^}]*)\}\\label\{([^}]*)\}", r"## \1 {#\2}\n", body)
+    body = re.sub(r"\\section\*?\{([^}]*)\}", r"## \1\n", body)
     body = re.sub(r"\\noindent\s*", "", body)
     body = re.sub(r"\\textbf\{([^{}]*)\}", r"**\1**", body)
     body = re.sub(r"\\emph\{([^{}]*)\}", r"*\1*", body)
@@ -85,15 +88,28 @@ def md_to_tex(md: str, tex: str) -> str:
         if b.startswith("## "):
             head, _, rest = b.partition("\n")
             name = head[3:].strip()
+            lab = re.search(r"\s*\{#([^}]*)\}\s*\Z", name)
+            if lab:
+                name = name[:lab.start()].strip()
             if name.lower() == "abstract":
                 out.append(r"\begin{abstract}"); in_abstract = True
             else:
                 if in_abstract:
                     out.append(r"\end{abstract}"); in_abstract = False
-                out.append(r"\section{" + name + "}")
+                out.append(r"\section{" + name + "}"
+                           + (r"\label{" + lab.group(1) + "}" if lab else ""))
             if rest.strip():
                 blocks.insert(i + 1, rest.strip())   # process the body as its own block
             continue
+        # A marker can be glued to the paragraph after it, because in the .tex
+        # the prose sometimes resumes on the same line as \end{table}. Split it
+        # off and let the remainder be processed as its own block, exactly as
+        # headings do above -- otherwise the marker silently survives into the
+        # .tex as literal text and the rebuild drops the table.
+        mlead = re.match(r"(\{\{TABLE:[^}]*\}\})\s*(.+)\Z", b, re.S)
+        if mlead:
+            b = mlead.group(1)
+            blocks.insert(i + 1, mlead.group(2).strip())
         mt = re.fullmatch(r"\{\{TABLE:([^}]*)\}\}", b)
         if mt:
             if in_abstract:
@@ -105,7 +121,10 @@ def md_to_tex(md: str, tex: str) -> str:
             continue
         t = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", b)
         t = re.sub(r"(?<![*\\])\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"\\emph{\1}", t)
-        t = t.replace(" --- ", ", ").replace("---", ", ")
+        # Em-dash removal is for prose only. Inside a tabular, "---" is an empty
+        # cell and rewriting it to "," silently corrupts the table.
+        if r"\begin{tabular}" not in t:
+            t = t.replace(" --- ", ", ").replace("---", ", ")
         out.append(t)
     if in_abstract:
         out.append(r"\end{abstract}")
