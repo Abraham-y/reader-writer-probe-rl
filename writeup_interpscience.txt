@@ -2,8 +2,7 @@
      The table, preamble and bibliography come from the .tex and are
      not editable here on purpose -- their numbers are gated. -->
 
-# A Good Monitor Is Not a Safe Reward, and Its Own Accuracy Will Not Warn You:
-Probe AUROC Is Measured on a Distribution That Training Against the Probe Removes
+# What Happens to a Monitor's Accuracy When You Train Against It
 
 ## Abstract
 
