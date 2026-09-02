@@ -150,7 +150,14 @@ One scope limit. The judge is a bystander, so this is not a demonstration that a
 
 The probe partly rides on surface properties of the text (\S\ref{sec:probe-reader}). A natural hypothesis is that the collapse happens because the policy learns to manufacture those surface properties. We test the hypothesis in two directions: first with detectors that read nothing but the text, then with reward arms that were pre-registered before we ran them.
 
-Then we closed the loop with two pre-registered RL arms, predictions committed before launch. Arm A borrows the logic of amnesic probing \citep{elazar2021amnesic}, though not its method: we residualise the 39 surface features out of the activations by least squares, refit on what remains, and train against that, which asks whether the collapse needs the surface information the probe rode on. Elazar et al.\ remove a property by iterative nullspace projection and measure the behavioural counterfactual; we remove a hand-specified feature set and measure a downstream training outcome. Both arms use the same recipe as the published run, both initialised from $C_{\text{SFT}}$ and compared against the init-matched run \texttt{runB} at $0.0734$, which we list as arm C. These three are rankable against each other and against nothing else in this paper (Table~\ref{tab:arms}).
+Then we closed the loop with two pre-registered RL arms, predictions committed before launch. Arm A borrows the logic of amnesic probing \citep{elazar2021amnesic}, though not its method: we residualise the 39 surface features out of the activations by least squares, refit on what remains, and train against that, which asks whether the collapse needs the surface information the probe rode on. Elazar et al.\ remove a property by iterative nullspace projection and measure the behavioural counterfactual; we remove a hand-specified feature set and measure a downstream training outcome. Both arms use the same recipe as the published run, both initialised from $C_{\text{SFT}}$ and compared against the init-matched run \texttt{runB} at $0.0734$, which we list as arm C. These three are rankable against each other and against nothing else in this paper (Figure~\ref{fig:ladder}, Table~\ref{tab:arms}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.78\linewidth]{figures/ladder.pdf}
+\caption{The better a reward reads, the worse the policy trained on it. Each point is one reward: its AUROC as a read-only monitor, scored on one population on prompts it was not fit on, against the first-block accuracy of the policy after 100 RLOO steps against it. Bars are the paired prompt-clustered $95\%$ intervals of each arm's difference from arm C. The same three rows are in Table~\ref{tab:arms}.}
+\label{fig:ladder}
+\end{figure}
 
 \begin{table}[h]
 \centering\small

@@ -51,7 +51,9 @@ def main() -> None:
     ax1.plot(steps, acc, "s-", color="#2c3e50", lw=1.8, ms=4,
              label="true accuracy (verifier)")
     ax1.set_ylabel("rate")
-    ax1.legend(fontsize=7.5, loc="center left", framealpha=0.9)
+    # centre right is the one empty region: flag rate is at ~1.0 and accuracy
+    # at ~0.15 there, so the box hides no data
+    ax1.legend(fontsize=7.5, loc="center right", framealpha=0.9)
     ax1.set_ylim(0, 1.05)
 
     ax2.plot(steps, auroc, "o-", color="#2471a3", lw=1.8, ms=4,
