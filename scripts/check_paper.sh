@@ -100,7 +100,11 @@ if words:
           f"{sum(1 for w in words if w < 12)} under 12w")
 PY
 
-if python3 scripts/make_submission_tex.py --check "$TEX.tex" >/dev/null 2>&1; then
+# A camera-ready is de-anonymised on purpose; scanning it for names would only
+# ever fail. scripts/verify_camera_ready.py checks its front matter instead.
+if grep -q '\\usepackage\[final\]' "$TEX.tex"; then
+  echo "  anonymity      n/a (camera-ready; see scripts/verify_camera_ready.py)"
+elif python3 scripts/make_submission_tex.py --check "$TEX.tex" >/dev/null 2>&1; then
   echo "  anonymity      OK"
 else
   echo "  anonymity      FAIL -- real name or repo URL leaked:"

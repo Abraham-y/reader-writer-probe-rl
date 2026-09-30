@@ -25,6 +25,7 @@ ACTS = os.path.join(ROOT, "followup/acts/phase0_harvest_runA")
 JUDGE = os.path.join(ROOT, "followup/results/fragility/judge_lag")
 STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
 TOL = {"auroc": 0.0015, "prec": 0.0015, "lr": 0.02, "flag": 0.0015,
+       "acc_first": 0.0015, "acc_last": 0.0015,
        # CIs are re-bootstrapped at lower resolution than the published 2,000
        # draws, so they get a Monte-Carlo tolerance rather than an exact match.
        "flag_lo": 0.02, "flag_hi": 0.02}
@@ -57,12 +58,15 @@ def probe_series():
     thr = None
     for st in STEPS:
         X = np.load(f"{ACTS}/{st}/16.npy")
-        y = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")["last_block"].values.astype(int)
+        lab = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")
+        y = lab["last_block"].values.astype(int)
         s = P.predict_proba(X)[:, 1]
-        pid = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")["prompt_idx"].values
+        pid = lab["prompt_idx"].values
         if thr is None:
             thr = float(np.quantile(s, 0.5))
         out[st] = stats(y, s, thr, pid)
+        out[st]["acc_last"] = float(y.mean())
+        out[st]["acc_first"] = float(lab["first_block"].mean())
     return out
 
 
@@ -76,33 +80,72 @@ def judge_series():
         if thr is None:
             thr = float(np.quantile(s, 0.5))
         rows[st] = stats(y, s, thr, pid)
+        rows[st]["acc_first"] = float(y.mean())   # the judge ladder grades the first block
     return rows
+
+
+def _column_keys(header):
+    """Map each header cell to the statistic it holds, by NAME.
+
+    Columns used to be read by position, which broke silently the moment the
+    camera-ready added accuracy columns: every cell would have been compared
+    against its neighbour's recomputation. Naming them makes a reordered or
+    added column either verified or loudly unrecognised, never misread."""
+    keys = []
+    for cell in header.split("&")[1:]:
+        c = re.sub(r"\\[a-zA-Z]+|[{}$\\]", "", cell).lower()
+        if "acc" in c and "first" in c:
+            keys.append("acc_first")
+        elif "acc" in c and "last" in c:
+            keys.append("acc_last")
+        elif "auroc" in c:
+            keys.append("auroc")
+        elif "step 0" in c or "step0" in c or "vs" in c:
+            keys.append(None)          # paired p against step 0; gated elsewhere
+        elif "prec" in c:
+            keys.append("prec")
+        elif "lr" in c:
+            keys.append("lr")
+        elif "flag" in c:
+            keys.append("flag")
+        else:
+            raise SystemExit(f"unrecognised column in lag table header: {cell.strip()!r}")
+    return keys
 
 
 def parse(tex, which):
     """Pull the table whose HEADER names `which` AUROC. Header, not position --
     position is exactly what the swap bug got wrong."""
-    hdr = re.search(r"RLOO step & \\textbf\{" + which + r" AUROC\}.*?\\bottomrule",
-                    tex, re.S)
+    hdr = re.search(r"(RLOO step &[^\n]*\\textbf\{" + which + r" AUROC\}[^\n]*)\\\\"
+                    r".*?\\bottomrule", tex, re.S)
     if not hdr:
         # Legitimately absent in the cut-down versions (the 2pp spotlight
         # carries only the judge table). Absence is fine; a WRONG table is not.
         return None, None
+    keys = _column_keys(hdr.group(1))
     body = hdr.group(0)
-    cap = tex[hdr.end():hdr.end() + 700]
+    cap = tex[hdr.end():hdr.end() + 900]
     caption = re.search(r"\\caption\{(.*?)\}\s*(?:\\label|\n\\end\{table\})", cap, re.S)
     rows = {}
-    for line in body.split("\n"):
+    for line in body.split("\n")[1:]:
         m = re.match(r"\s*(?:\\textbf\{)?(\d+)\}?\s*&(.*)\\\\", line)
         if not m:
             continue
         cells = [re.sub(r"\\textbf\{|\}|\s", "", c) for c in m.group(2).split("&")]
-        auroc = float(cells[0].split("[")[0])
-        flag, fci = cells[4].split("[")
-        flo, fhi = (float(x) for x in fci.rstrip("]").split(","))
-        rows[int(m.group(1))] = {"auroc": auroc, "prec": float(cells[2]),
-                                 "lr": float(cells[3]), "flag": float(flag),
-                                 "flag_lo": flo, "flag_hi": fhi}
+        if len(cells) != len(keys):
+            raise SystemExit(f"{which} table row {m.group(1)}: {len(cells)} cells "
+                             f"under {len(keys)} headers")
+        row = {}
+        for k, c in zip(keys, cells):
+            if k is None:
+                continue
+            if k == "flag":
+                flag, fci = c.split("[")
+                row["flag"] = float(flag)
+                row["flag_lo"], row["flag_hi"] = (float(x) for x in fci.rstrip("]").split(","))
+            else:
+                row[k] = float(c.split("[")[0])
+        rows[int(m.group(1))] = row
     return rows, (caption.group(1)[:80] if caption else "")
 
 
@@ -168,14 +211,20 @@ def main():
         real = truth()
         print(f"\n=== {which} table ({len(pub)} rows) ===")
         print(f"  caption: {caption[:70]}...")
+        n_cells = 0
         for st in sorted(pub):
-            for k in ("auroc", "prec", "lr", "flag", "flag_lo", "flag_hi"):
-                p, r = pub[st][k], real[st][k]
+            for k, p in pub[st].items():
+                if k not in real[st]:
+                    print(f"  step {st:>3} {k}: no recomputation exists for this column")
+                    bad += 1
+                    continue
+                r = real[st][k]
+                n_cells += 1
                 if abs(p - r) > TOL[k]:
                     print(f"  MISMATCH step {st:>3} {k:>5}: paper {p} vs recomputed {r:.4f}")
                     bad += 1
         if not bad:
-            print(f"  all {6*len(pub)} cells match recomputation")
+            print(f"  all {n_cells} cells match recomputation")
 
     # the swap check: where both are present they must not be the same numbers
     pp, _ = parse(tex, "probe"); jj, _ = parse(tex, "judge")

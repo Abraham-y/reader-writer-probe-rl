@@ -105,7 +105,18 @@ done
 
 echo
 echo "=== submission: is the thing you are about to upload safe? ==="
-for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper writeup_interpscience; do
+# writeup_interpscience is the de-anonymised camera-ready now (accepted
+# 2026-09-29), so the anonymity scan would rightly fail on it. It gets the
+# inverse check instead: real author block, final-mode style, no blind-review
+# wording, every number the reviewer fixes added, and no open TODO. The blind
+# submission itself is the git tag `interpscience-submission`.
+if [ -f writeup_interpscience.tex ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
+  run "camera-ready: writeup_interpscience" \
+      python -W ignore scripts/verify_camera_ready.py --tex writeup_interpscience.tex
+else
+  printf '%-46s%s\n' "camera-ready: writeup_interpscience" "SKIP (tex or acts missing)"
+fi
+for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper; do
   if [ -f "$tex.tex" ]; then
     run "anonymity scan: $tex" \
         python scripts/make_submission_tex.py --check "$tex.tex"

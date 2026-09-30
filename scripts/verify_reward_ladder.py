@@ -85,7 +85,12 @@ def main() -> None:
     else:
         print("  ordering: AUROC ascending, accuracy descending -- inversion holds")
 
-    if "0.978" in tex:
+    # The per-checkpoint ladder tables carry hundreds of rates, and a flag rate
+    # of 0.978 is a legitimate cell there (Table 5, seen prompts, step 60).
+    # The guard is against 0.978 being quoted as a reward's AUROC, so search
+    # everything except those tables.
+    ladders = r"\\begin\{table\}(?:(?!\\end\{table\}).)*?\\label\{tab:(?:lag|judge|overlap)\}.*?\\end\{table\}"
+    if "0.978" in re.sub(ladders, " ", tex, flags=re.S):
         bad.append("0.978 is back in the paper; it is not any reward's AUROC")
 
     if bad:
