@@ -34,7 +34,7 @@ scripts look for them.
 git clone https://github.com/Abraham-y/reader-writer-probe-rl
 cd reader-writer-probe-rl
 pip install huggingface_hub   # plus the repository's own requirements
-python scripts/artifacts.py fetch --repo <this dataset's id>
+python scripts/artifacts.py fetch
 bash scripts/check_everything.sh
 ```
 

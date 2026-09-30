@@ -18,11 +18,12 @@ to exactly zero.
 ## Reproducing the paper
 
 Every number, table and figure in the paper regenerates on CPU from 0.31 GB of
-cached artifacts (activations, judge scores, rollouts), which are published as a
-Hugging Face dataset that mirrors this repository's paths:
+cached artifacts (activations, judge scores, rollouts), published as the Hugging
+Face dataset [`prismane16/monitor-accuracy-under-rl`](https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl), which mirrors
+this repository's paths:
 
 ```bash
-python scripts/artifacts.py fetch --repo <dataset id>   # download into place, verify SHA-256
+python scripts/artifacts.py fetch        # download into place, verify SHA-256
 bash scripts/check_everything.sh                         # ~15 min on a laptop
 ```
 

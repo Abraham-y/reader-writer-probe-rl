@@ -37,7 +37,7 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MANIFEST = os.path.join(_ROOT, "artifacts", "MANIFEST.tsv")
 CARD = os.path.join(_ROOT, "artifacts", "README.md")
 # Set once the dataset exists; `fetch` reads it so readers need no arguments.
-DEFAULT_REPO = os.environ.get("ARTIFACTS_REPO", "")
+DEFAULT_REPO = os.environ.get("ARTIFACTS_REPO", "prismane16/monitor-accuracy-under-rl")
 
 # Read during the traced run but not artifacts: code, the paper, and tooling.
 _SKIP_EXT = (".py", ".pyc", ".sh", ".tex", ".txt", ".md", ".sty", ".bib", ".log")

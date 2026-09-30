@@ -222,6 +222,7 @@ def front_matter(tex):
         "\\begin{ack}": "acknowledgments section",
         "compute credits from Modal": "Modal funding acknowledgment",
         "pdftitle=": "PDF title metadata",
+        "https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl": "artifact link",
     }
     never = {
         "Anonymous Author": "blind-review author block",
