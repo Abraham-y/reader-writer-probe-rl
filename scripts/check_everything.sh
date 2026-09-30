@@ -68,9 +68,8 @@ echo "=== paper: do the tables in the tex match the analysis? ==="
 # Added after an edit pass overwrote the probe's lag table with the judge's and
 # every existing gate stayed green: they all checked that the analysis
 # reproduced, none that the PAPER agreed with it.
-# Only the camera-ready is gated. The earlier cuts (four JUDGe tracks and the
-# long workshop draft) are frozen in archive/papers/ and will never be uploaded;
-# check one by hand with e.g. --tex archive/papers/writeup_judge.tex.
+# Only the camera-ready is gated; the earlier cuts (four JUDGe tracks and the
+# long workshop draft) were removed from the repository before release.
 for tex in writeup_interpscience; do
   if [ -f "$tex.tex" ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
     run "lag tables: $tex" \

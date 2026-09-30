@@ -1,5 +1,9 @@
 """Derive the anonymous NeurIPS-workshop submission from `writeup_workshop.tex`.
 
+STATUS: only `--check` is still in use (by check_paper.sh, for non-final papers).
+The source draft this generated from was removed before the repository's public
+release, so the generate mode has nothing to read.
+
 Two things have to be true of the submitted PDF and are not true of the working
 draft: it must be in the venue's style file, and it must be double-blind. Both
 are mechanical, so they are done here rather than in a second hand-maintained

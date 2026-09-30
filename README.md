@@ -73,7 +73,7 @@ deployment failures, and a 5-step run caught all of them.
 | `extension/` | probe pipeline, probe-as-reward training, deployment-time analyses |
 | `rloo_trainer/`, `sft_trainer/`, `ipo_trainer/`, `evaluation/` | training and evaluation code from the base project |
 | `docs/` | audits and revision notes; `docs/REVISION_PACK.md` records every corrected number and why |
-| `archive/` | superseded paper drafts and early scratch files, kept for provenance |
+| `archive/course/` | early scratch scripts from the course project, kept for provenance |
 
 The anonymous version submitted for review is the git tag `interpscience-submission`.
 

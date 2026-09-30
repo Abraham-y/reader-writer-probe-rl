@@ -57,7 +57,7 @@ extension/outputs/n500/probe_behavioral_1.5b/
 # the camera-ready (writeup_interpscience.{tex,txt,pdf}) and everything it needs
 # to build from a fresh clone -- the style file, the .bib and the two figures
 # (regenerate those with scripts/plot_lag_from_gated.py and
-# scripts/plot_ladder_from_gated.py). Superseded cuts are in archive/papers/.
+# scripts/plot_ladder_from_gated.py). Earlier drafts were removed before release.
 # Everything else LaTeX writes is ignored. Negations come after the rules they
 # undo, and `figures/*` (not `figures/`) so that the negations can reach inside.
 *.tex
@@ -78,7 +78,6 @@ figures/*
 */**/figures/
 !writeup_interpscience.tex
 !writeup_interpscience.pdf
-!archive/papers/*.tex
 !neurips_workshop.sty
 !references.bib
 !figures/lag.pdf
