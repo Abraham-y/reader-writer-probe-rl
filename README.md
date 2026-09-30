@@ -42,6 +42,26 @@ pdflatex writeup_interpscience.tex && pdflatex writeup_interpscience.tex
 Retraining any run needs a GPU; the recipes are in the project history below and
 in `followup/experiments/fragility/residual_probe/HANDOFF.md`.
 
+### Running the GPU jobs on Modal
+
+Every training run and large evaluation in the paper ran on [Modal](https://modal.com),
+which sponsored the compute, and the deployment code is part of this repository:
+
+| file | what it launches |
+|---|---|
+| `modal_train.py` | SFT, IPO and the RLOO variants (vanilla, probe-as-reward `probe_rloo`, shaped rewards), sampling (`sample_local`), activation caching and the probe analyses: `modal run modal_train.py <trainer> -- <args>` |
+| `followup/modal_fragility.py` | the checkpoint-ladder harvest (`harvest`), the judge ladder (`judge_ladder`), the pre-registered reward arms (`residual_rl`) and their evaluation (`eval_local`) |
+| `modal_requirements.txt` | the container's pinned Python environment |
+| `{rloo,sft,ipo}_trainer/train_*_modal.sh`, `evaluation/sample_modal.sh` | shell launchers for the base-project runs |
+
+Both apps mount one Modal volume for checkpoints and results
+(`MODAL_VOLUME_NAME`, default `default-proj-training`). Credentials are never in
+the code: `HF_TOKEN` and `WANDB_API_KEY` are read from the launching shell and
+passed to the container as a Modal secret, so export them (for example from a
+local `.env`) before `modal run`. Smoke-test with `--num_training_steps 5` before
+a full run: `followup/experiments/fragility/residual_probe/HANDOFF.md` lists five
+deployment failures, and a 5-step run caught all of them.
+
 ## Where things are
 
 | path | what it is |

@@ -217,6 +217,11 @@ def front_matter(tex):
         "Anagha Ramaswamy": "second author",
         "InterpScience": "workshop named",
         "https://github.com/Abraham-y/reader-writer-probe-rl": "code link",
+        # Modal sponsored the compute on condition of being acknowledged as a
+        # funding source, so its removal must fail the gate, not slip through.
+        "\\begin{ack}": "acknowledgments section",
+        "compute credits from Modal": "Modal funding acknowledgment",
+        "pdftitle=": "PDF title metadata",
     }
     never = {
         "Anonymous Author": "blind-review author block",
