@@ -68,10 +68,10 @@ echo "=== paper: do the tables in the tex match the analysis? ==="
 # Added after an edit pass overwrote the probe's lag table with the judge's and
 # every existing gate stayed green: they all checked that the analysis
 # reproduced, none that the PAPER agreed with it.
-# Three cuts of the same paper for the three JUDGe tracks: 6pp full, 4pp short,
-# 2pp junior spotlight. Every one of them gets checked -- a number corrected in
-# one cut and missed in another is exactly the drift these gates exist to catch.
-for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper writeup_interpscience; do
+# Only the camera-ready is gated. The earlier cuts (four JUDGe tracks and the
+# long workshop draft) are frozen in archive/papers/ and will never be uploaded;
+# check one by hand with e.g. --tex archive/papers/writeup_judge.tex.
+for tex in writeup_interpscience; do
   if [ -f "$tex.tex" ] && [ -d followup/acts/phase0_harvest_runA/50 ]; then
     run "lag tables: $tex" \
         python -W ignore scripts/verify_paper_tables.py --tex "$tex.tex"
@@ -94,7 +94,7 @@ fi
 
 # Table cells were gated long before prose numbers were, and the 2pp rewrite
 # retyped ~20 figures into sentences where nothing checked them. This closes it.
-for tex in writeup_judge_spotlight writeup_judge_shortpaper writeup_interpscience; do
+for tex in writeup_interpscience; do
   if [ -f "$tex.tex" ] && [ -d followup/results/fragility/judge_lag ]; then
     run "prose numbers: $tex" \
         python -W ignore scripts/verify_prose_numbers.py --tex "$tex.tex"
@@ -116,14 +116,6 @@ if [ -f writeup_interpscience.tex ] && [ -d followup/acts/phase0_harvest_runA/50
 else
   printf '%-46s%s\n' "camera-ready: writeup_interpscience" "SKIP (tex or acts missing)"
 fi
-for tex in writeup_judge writeup_judge_short writeup_judge_spotlight writeup_judge_shortpaper; do
-  if [ -f "$tex.tex" ]; then
-    run "anonymity scan: $tex" \
-        python scripts/make_submission_tex.py --check "$tex.tex"
-  else
-    printf '%-46s%s\n' "anonymity scan: $tex" "SKIP (not built)"
-  fi
-done
 
 echo
 if [ "$fail" -eq 0 ]; then

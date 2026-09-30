@@ -43,7 +43,7 @@ import sys
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-SRC = os.path.join(_ROOT, "writeup_workshop.tex")
+SRC = os.path.join(_ROOT, "archive", "papers", "writeup_workshop.tex")
 OUT = os.path.join(_ROOT, "writeup_workshop_submission.tex")
 
 # Anything matching these must not appear in an anonymous build. Checked after
@@ -181,7 +181,7 @@ def main() -> None:
     # The submission that goes to JUDGe (writeup_judge.tex) was cut down by hand
     # rather than produced by this generator, so nothing was scanning it. A
     # generator that only vets its own output leaves the actual artifact ungated,
-    # which is the same shape of gap as A8 in CODE_AUDIT.md. --check closes it.
+    # which is the same shape of gap as A8 in docs/CODE_AUDIT.md. --check closes it.
     if args.check:
         text = open(args.check).read()
         hits = check_anonymous(text)

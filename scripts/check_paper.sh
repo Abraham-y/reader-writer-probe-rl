@@ -5,8 +5,7 @@
 #   does it still compile, does it still FIT the page limit, is it still
 #   anonymous, and did any AI-writing tell creep back in.
 #
-#   bash scripts/check_paper.sh                      # spotlight, 2pp
-#   bash scripts/check_paper.sh writeup_judge_short 4
+#   bash scripts/check_paper.sh                      # the camera-ready, 9pp
 #
 # This does NOT re-verify the table numbers -- that needs bootstraps and takes
 # a few minutes. Run `bash scripts/check_everything.sh` before you submit.
@@ -14,8 +13,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-TEX="${1:-writeup_judge_spotlight}"
-LIMIT="${2:-2}"
+TEX="${1:-writeup_interpscience}"
+LIMIT="${2:-9}"
 
 pdflatex -interaction=nonstopmode "$TEX.tex" >/dev/null 2>&1
 pdflatex -interaction=nonstopmode "$TEX.tex" >/tmp/_cp.log 2>&1

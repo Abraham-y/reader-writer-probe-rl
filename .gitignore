@@ -51,23 +51,16 @@ extension/outputs/n500/probe_behavioral_1.5b/
 # Personal/local Claude Code settings
 .claude/
 
-# === Paper artifacts (kept private; NEVER PUSH) ===
-# The paper sources are tracked so the submissions are backed up, but this
-# repo's remote is github.com/Abraham-y/... -- the owner name is an author
-# name -- and writeup_workshop{,_full}.tex carry both real names. Pushing
-# these while JUDGe review is open breaks the double-blind: a reviewer who
-# finds the repo sees a named version of the anonymised submission.
-# Keep them local until decisions are out.
+# === Paper ===
+# InterpScience 2026 accepted the paper on 2026-09-29, so the blind-review rule
+# that kept paper sources off the remote no longer applies. What is tracked:
+# the camera-ready (writeup_interpscience.{tex,txt,pdf}) and everything it needs
+# to build from a fresh clone -- the style file, the .bib and the two figures
+# (regenerate those with scripts/plot_lag_from_gated.py and
+# scripts/plot_ladder_from_gated.py). Superseded cuts are in archive/papers/.
+# Everything else LaTeX writes is ignored. Negations come after the rules they
+# undo, and `figures/*` (not `figures/`) so that the negations can reach inside.
 *.tex
-!writeup_judge.tex
-!writeup_judge_short.tex
-!writeup_judge_spotlight.tex
-!writeup_workshop.tex
-!writeup_workshop_full.tex
-!writeup_judge_spotlight.txt
-!writeup_judge_shortpaper.tex
-!writeup_judge_shortpaper.txt
-!writeup_interpscience.tex
 *.pdf
 *.aux
 *.bbl
@@ -80,7 +73,23 @@ extension/outputs/n500/probe_behavioral_1.5b/
 *.bib
 *.cls
 *.sty
-figures/
+figures/*
+# ...and every nested figures/ directory, as the old `figures/` rule did
+*/**/figures/
+!writeup_interpscience.tex
+!writeup_interpscience.pdf
+!archive/papers/*.tex
+!neurips_workshop.sty
+!references.bib
+!figures/lag.pdf
+!figures/ladder.pdf
+
+# Local-only material that was never in git (old course reports, submission
+# zips, superseded PDFs). Kept on disk, never pushed.
+_attic/
+
+# huggingface_hub keeps download metadata here when fetching artifacts into place
+.cache/
 
 # Private research notes / writeups / runbooks (not for the public repo)
 writeup.md

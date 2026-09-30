@@ -196,7 +196,7 @@ def error_table(tex):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--tex", default=os.path.join(ROOT, "writeup_judge.tex"))
+    ap.add_argument("--tex", default=os.path.join(ROOT, "writeup_interpscience.tex"))
     a = ap.parse_args()
     tex = open(a.tex).read()
 

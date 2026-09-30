@@ -1,12 +1,67 @@
-# Reading vs. Writing a Near-Oracle Internal Verifier
+# What Happens to a Monitor's Accuracy When You Train Against It
 
-**Abraham Yeung & Anagha Ramaswamy.**
+**Abraham Yeung and Anagha Ramaswamy**, Stanford University.
+Interpretability as a Science (InterpScience) Workshop, NeurIPS 2026.
 
-This repository contains the code and experimental artifacts for our investigation of when a near-oracle linear correctness probe on a small language model's hidden states is safe to wire into RL training, and when it catastrophically fails. The headline finding is a **reader/writer asymmetry**: the same probe direction is excellent as a deployment selector, causally inert under intervention on the vanilla checkpoint, and a catastrophic Goodhart trap when used as the RL reward — and the difference between those outcomes is entirely determined by how much policy-gradient access the probe receives.
+Paper: [`writeup_interpscience.pdf`](writeup_interpscience.pdf) (source [`writeup_interpscience.tex`](writeup_interpscience.tex)).
 
----
+A linear probe on Qwen2.5-0.5B's hidden states predicts whether a Countdown answer
+will be correct (held-out AUROC 0.982). A second fit of the same kind, used as the
+RL reward, lowers true accuracy by 31 points, and the probe's own AUROC shows no
+significant change for 40 steps after accuracy starts to fall. A fixed LLM judge
+scoring the same run keeps its AUROC while accuracy falls from 54% to 23%: a
+monitor's accuracy statistics describe the monitor together with the population it
+scores, and deploying the monitor moves the population. Separately, a reward built
+from 39 text features scores higher than the probe as a monitor and drives accuracy
+to exactly zero.
 
-## Headline results
+## Reproducing the paper
+
+Every number, table and figure in the paper regenerates on CPU from 0.31 GB of
+cached artifacts (activations, judge scores, rollouts), which are published as a
+Hugging Face dataset that mirrors this repository's paths:
+
+```bash
+python scripts/artifacts.py fetch --repo <dataset id>   # download into place, verify SHA-256
+bash scripts/check_everything.sh                         # ~15 min on a laptop
+```
+
+`scripts/check_everything.sh` recomputes each published value, prints it beside
+the number in the tex, and exits non-zero on any disagreement. `artifacts/MANIFEST.tsv`
+lists every artifact with its size and hash; `artifacts/README.md` is the
+dataset's card and says what each file is and where the paper uses it.
+
+To rebuild the PDF and its figures:
+
+```bash
+python scripts/plot_lag_from_gated.py --out figures/lag.pdf
+python scripts/plot_ladder_from_gated.py
+pdflatex writeup_interpscience.tex && pdflatex writeup_interpscience.tex
+```
+
+Retraining any run needs a GPU; the recipes are in the project history below and
+in `followup/experiments/fragility/residual_probe/HANDOFF.md`.
+
+## Where things are
+
+| path | what it is |
+|---|---|
+| `writeup_interpscience.{tex,txt,pdf}` | the paper; edit the `.txt` and rebuild with `scripts/md_to_tex.py`, or edit the tex |
+| `scripts/` | the gate suite, figure scripts and paper tooling |
+| `followup/` | the lag, judge-ladder and pre-registered reward-arm experiments |
+| `extension/` | probe pipeline, probe-as-reward training, deployment-time analyses |
+| `rloo_trainer/`, `sft_trainer/`, `ipo_trainer/`, `evaluation/` | training and evaluation code from the base project |
+| `docs/` | audits and revision notes; `docs/REVISION_PACK.md` records every corrected number and why |
+| `archive/` | superseded paper drafts and early scratch files, kept for provenance |
+
+The anonymous version submitted for review is the git tag `interpscience-submission`.
+
+## Project history
+
+The rest of this README predates the paper and describes the wider project it
+came out of. Where the two disagree, the paper and its gates are current.
+
+### Headline results
 
 Working on Qwen2.5-0.5B (replicated at 1.5B) trained on Countdown arithmetic with RLOO:
 
@@ -21,11 +76,11 @@ Working on Qwen2.5-0.5B (replicated at 1.5B) trained on Countdown arithmetic wit
 | **A monitor with no internal access reproduces the failure**, and used as the reward it destroys the task. | 7-feature text-only logistic regression, frozen on baseline: score `0.506 → 0.832` while true accuracy falls `0.517 → 0.130`. As the RL reward (pre-registered Arm B): `0.0000` accuracy, with `99.9%` of rollouts still emitting a well-formed but arithmetic-free `<answer>` block. |
 | **Safe constructions** that bound or eliminate probe gradient access give either small lifts or no Goodhart — **and none beats read-only selection.** | Probe-as-baseline (LOO control variate): target-invariant, untested. Multiplicative shaping `r = verifier × probe`: `+2.84 pp` first-block, CI `[+1.85, +3.85]`, n=1 run. Probe-best-of-K in-training selection: `+1.5 pp`, halves mean blocks per rollout, n=1 run. Read-only best-of-16: `+11.7 pp`. |
 
-**Withdrawn.** An earlier version of this README claimed a mech-interp signature of Goodhart — the optimised probe direction becoming causal post-RL (Δ = `+0.083`) while a near-orthogonal control stayed null. That result does not survive checking and is retracted: the steered vector has cosine `0.163` with the probe RL actually optimised (not `1.000`) and AUROC `0.896` (not `0.982`), the steering hook sat one transformer block and 2–3 tokens downstream of the probe's read site, the key contrasts reach only p = 0.063 and p = 0.080, and the three steering runs share zero prompts. `causal_steering.py` now fixes both the layer index and the token position, so it will not reproduce the published JSONLs; use `--layer_convention legacy_block --steer_position last_token` if you need to. See `REVISION_PACK.md` §A.
+**Withdrawn.** An earlier version of this README claimed a mech-interp signature of Goodhart — the optimised probe direction becoming causal post-RL (Δ = `+0.083`) while a near-orthogonal control stayed null. That result does not survive checking and is retracted: the steered vector has cosine `0.163` with the probe RL actually optimised (not `1.000`) and AUROC `0.896` (not `0.982`), the steering hook sat one transformer block and 2–3 tokens downstream of the probe's read site, the key contrasts reach only p = 0.063 and p = 0.080, and the three steering runs share zero prompts. `causal_steering.py` now fixes both the layer index and the token position, so it will not reproduce the published JSONLs; use `--layer_convention legacy_block --steer_position last_token` if you need to. See `docs/REVISION_PACK.md` §A.
 
 ---
 
-## Repository layout
+### Repository layout
 
 ```
 extension/                       # All research-extension code lives here
@@ -73,11 +128,11 @@ The `extension/cache/` directory holds cached hidden-state activations (`.npz`, 
 
 ---
 
-## Reproducing the headline experiments
+### Reproducing the headline experiments
 
 All training and large evals were run on Modal H100 (single GPU per job). Total project compute spend: **~$265**.
 
-### 1. SFT and the baseline RL checkpoint
+#### 1. SFT and the baseline RL checkpoint
 
 We did not retrain SFT. `C_SFT` is `asingh15/qwen-sft-countdown-defaultproj`. `C_outcome` is 100 RLOO steps from `C_SFT` with the standard verifier reward (`batch_size=128`, `kl=1e-3`, `lr=1e-5`).
 
@@ -85,7 +140,7 @@ We did not retrain SFT. `C_SFT` is `asingh15/qwen-sft-countdown-defaultproj`. `C
 bash rloo_trainer/train_rloo_modal.sh   # 100 steps from C_SFT, verifier reward
 ```
 
-### 2. Cache hidden states and train probes
+#### 2. Cache hidden states and train probes
 
 ```bash
 python extension/probe/cache_hidden_states.py        # pre_answer / assertion / neutral
@@ -93,7 +148,7 @@ python extension/probe/cache_answer_positions.py     # <answer>-opening position
 python extension/probe/save_probe_direction_temp1.py # persist L16 pre_answer direction
 ```
 
-### 3. Deployment-time applied probes
+#### 3. Deployment-time applied probes
 
 ```bash
 python extension/probe/probe_bestofk_offline.py        # best-of-16
@@ -105,7 +160,7 @@ python extension/probe/probe_answer_commit.py          # within-rollout block se
 python extension/probe/probe_applied_scale_comparison.py  # 0.5B vs 1.5B
 ```
 
-### 4. Causal steering
+#### 4. Causal steering
 
 Two flags on this script changed on 2026-08-12 and both change the numbers, so read
 this before comparing against any shipped JSONL.
@@ -135,7 +190,7 @@ prompt-clustered bootstrap and exact McNemar. Note that the vanilla and
 post-Goodhart JSONLs share **zero prompts** (50/97 prefixes vs 100/194), so any
 before/after contrast across those files is unpaired.
 
-### 5. Probe-as-RL-reward (Goodhart demonstration)
+#### 5. Probe-as-RL-reward (Goodhart demonstration)
 
 The initialisation is `--model_name` (passed straight through to `rloo.py`); the
 reward shaping is `--reward_mode`.
@@ -160,7 +215,7 @@ python extension/training/probe_reward_rloo.py \
 `--reward_mode` is one of `probe | probe_gated | blend | mult`. `--reward_disable`
 reverts to the vanilla verifier reward as an A/B control.
 
-### 6. Probe-best-of-K in-training selection (the hybrid that beats vanilla RLOO)
+#### 6. Probe-best-of-K in-training selection (the hybrid that beats vanilla RLOO)
 
 Top-M gating lives on `rloo.py` and requires `--probe_baseline`:
 
@@ -184,7 +239,7 @@ python extension/training/probe_augmented_rloo.py --lambda_mix 0.5 \
     --model_name asingh15/qwen-sft-countdown-defaultproj
 ```
 
-### 6b. Structural controls (run these before quoting any probe number)
+#### 6b. Structural controls (run these before quoting any probe number)
 
 ```bash
 python extension/probe/structural_baselines.py
@@ -194,21 +249,21 @@ Reports, on the same folds and population as the probe: the AUROC of the
 `</think>` token position alone, the probe's AUROC stratified within
 position deciles, best-of-K for "pick the shortest `<think>` body" next to
 probe-best-of-K, and the size/accuracy of the no-`</think>` rollouts that are
-absent from every cached AUROC. See `CODE_AUDIT.md` §C1.
+absent from every cached AUROC. See `docs/CODE_AUDIT.md` §C1.
 
-### 7. Probe-as-baseline (target-invariant LOO control variate)
+#### 7. Probe-as-baseline (target-invariant LOO control variate)
 
 The `--probe_baseline` flag in `rloo_trainer/rloo_update_worker.py` replaces the standard reward-mean baseline with the LOO mean of per-rollout probe values. The optimisation target remains the verifier; the probe enters only through the variance-reduction baseline. This construction is code-complete and theoretically Goodhart-free; the controlled run-time comparison against vanilla RLOO is the obvious next experiment and not in the report.
 
 ---
 
-## What this repository does *not* contain
+### What this repository does *not* contain
 
 - Trained checkpoints, cached activations, and large eval JSONs (>5 MB). Reproduce with the scripts above.
 - The probe-as-baseline empirical results; see the report's "Failed Attempts and Null Results" section — the construction is code-complete but a controlled run-time comparison is out of scope.
 
 ---
 
-## References for the methodology
+### References for the methodology
 
 The activation-addition steering protocol and matched random-direction control follow Turner et al. 2023 (ActAdd), Zou et al. 2023 (Representation Engineering), Rimsky et al. 2024 (CAA), and Arditi et al. 2024 (refusal direction). The probe-vs-causation methodological framing this project operationalises is Belinkov 2022 ("Probing Classifiers: Promises, Shortcomings, and Advances"). For the RL setup and baseline construction we follow Ahmadian et al. 2024 (RLOO) and the classical control-variate analysis of Williams 1992.

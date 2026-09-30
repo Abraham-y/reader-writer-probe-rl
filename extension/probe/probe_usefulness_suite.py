@@ -34,7 +34,7 @@ Usage:
     python extension/probe/probe_usefulness_suite.py       # local (GPU needed)
 
 -------------------------------------------------------------------------------
-READ BEFORE QUOTING THESE NUMBERS  (see CODE_AUDIT.md)
+READ BEFORE QUOTING THESE NUMBERS  (see docs/CODE_AUDIT.md)
 
 This file produces `probe_usefulness_suite_results_n406.json`, which supplies
 several README headline numbers. It was deleted in cd8cd5e and restored, because

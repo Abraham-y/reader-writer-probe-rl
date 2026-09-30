@@ -312,7 +312,7 @@ class SurfaceOnlyProbe:
     """Scores from the 39 surface features ALONE. Never reads the activation.
 
     Arm B of the pre-registered design: the falsifier for the surface-occupation
-    account in REVISION_PACK.md section G2. If a reward with no access to the
+    account in docs/REVISION_PACK.md section G2. If a reward with no access to the
     model's internals still collapses true accuracy, occupying cheap textual
     structure is sufficient to break a monitor. If it does NOT collapse, G2 is
     wrong and should be retracted.

@@ -30,7 +30,7 @@ STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--tex", default="writeup_judge_spotlight.tex")
+    ap.add_argument("--tex", default="writeup_interpscience.tex")
     a = ap.parse_args()
     tex = open(os.path.join(_ROOT, a.tex)).read()
     # Body AND appendix. Appendices sit after the bibliography, and when

@@ -135,7 +135,7 @@ def md_to_tex(md: str, tex: str) -> str:
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tex", default="writeup_judge_spotlight.tex")
+    ap.add_argument("--tex", default="writeup_interpscience.tex")
     ap.add_argument("--md", default=None,
                     help="prose file; defaults to the .tex name with .txt (or .md if that exists)")
     ap.add_argument("--extract", action="store_true",

@@ -16,7 +16,7 @@
 Build, gate, run, and evaluate **Arm B**: a reward probe that scores from the 39
 cheap surface features ONLY, ignoring the activation entirely.
 
-It is the falsifier for the surface-occupation account in `REVISION_PACK.md` §G2.
+It is the falsifier for the surface-occupation account in `docs/REVISION_PACK.md` §G2.
 Prediction, already committed in `PREREGISTRATION.md`: **Arm B collapses at least
 as hard as the published probe-as-reward run (0.2361).** If a reward with no access
 to the model's internals does NOT collapse, §G2 is wrong and should be retracted,
@@ -121,5 +121,5 @@ few dollars and it caught all five.
 ## Bigger picture
 
 The paper itself is submittable without Arm B. Every corrected number is in
-`REVISION_PACK.md`; what remains there is prose, which the user is writing.
+`docs/REVISION_PACK.md`; what remains there is prose, which the user is writing.
 Target venue JUDGe (backup Verify-Agents), deadline 2026-08-29.
