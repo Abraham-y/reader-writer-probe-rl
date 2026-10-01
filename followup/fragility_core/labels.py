@@ -1,8 +1,12 @@
 """Rollout labelling, structural-template features, and the global train/val split.
 
 Labels come from the ORIGINAL verifier (`evaluation.countdown`), not a
-reimplementation, so probe labels here are bit-identical to the RL reward's
-notion of correctness.
+reimplementation. Two caveats on "the same as the RL reward". The block regex
+here uses re.DOTALL and the verifier's extract_solution does not, so the two
+disagree on answer blocks that span lines (2 of 2,400 reward-probe fitting
+rollouts). And RL sampling stopped at the first "</answer>", so the reward only
+ever graded the first block; last_block on an unstopped rollout is not a label
+the RL reward ever produced.
 
 Two label rules are always computed and stored side by side:
 

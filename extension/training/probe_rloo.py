@@ -1,7 +1,8 @@
 """RLOO with linear probe as reward signal.
 
 The standard Countdown verifier scores the LAST <answer> block in a rollout
-with 0/0.1/1.0. The trace-final `</think>` probe (held-out balanced AUROC
+with 0/0.1/1.0. During RL, sampling stops at the first "</answer>"
+(rloo_trainer/sampling_worker.py), so in training the last block IS the first. The trace-final `</think>` probe (held-out balanced AUROC
 0.982 on C_outcome with corrected next-block-correctness labels) is a
 near-oracle proxy for first-`<answer>`-block correctness.
 
@@ -22,8 +23,8 @@ current policy. The probe-as-reward question:
   policy -- Goodhart manifests as a measurable representational signature.
 
 CLI:
-  --probe_pkl   path to pickled sklearn Pipeline (StandardScaler+LogReg)
-                default: extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl
+  --probe_pkl   path to pickled sklearn Pipeline (StandardScaler+LogReg). Required.
+                runA/runB used probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl.
   --probe_hybrid  enable variant B (probe + verifier hybrid)
   --probe_layer   L16 default
 """
@@ -215,12 +216,12 @@ def _install_probe_reward(probe_pkl_path: str, hybrid: bool, layer: int) -> None
         """Return scalar probe probability in [0, 1] for the rollout's </think> position.
 
         MUST mirror cache_hidden_states.py exactly:
-          1. Tokenize prompt + FULL response (not just up to </think>)
-          2. Use offset_mapping to find the token covering the LAST CHARACTER
-             of "</think>" (the '>'). If we truncate the response at </think>,
-             the trailing `>` becomes its own token instead of merging with
-             the following '\n\n' into a single '>\n\n' token, which is what
-             the cache saw -- so the activations differ, probe saturates.
+          1. Tokenize prompt + FULL response (not just up to </think>), so the
+             tokenisation around </think> is the one the cache saw.
+          2. Read the token containing the FIRST character of the first
+             "</think>" after the prompt (char_to_token_index), at
+             hidden_states[layer]. (An earlier version of this docstring said
+             the LAST character; the code below uses the first, as the cache does.)
 
         Returns 0.0 if </think> token not found, model not loaded, or any error.
         """
@@ -321,7 +322,14 @@ def _install_probe_reward(probe_pkl_path: str, hybrid: bool, layer: int) -> None
 
 def main() -> None:
     hybrid = _pop_switch("probe_hybrid")
-    probe_pkl = _pop_arg("probe_pkl", "/vol/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl")
+    # No default. The old default was the first-block T=0.6 probe (AUROC 0.982),
+    # not the temperature-1 reward probe runA/runB actually trained against, and
+    # the flag was never recorded -- so a rerun with defaults would silently
+    # train against a different probe. Make the choice explicit.
+    probe_pkl = _pop_arg("probe_pkl")
+    if not probe_pkl:
+        raise SystemExit("probe_rloo.py: pass --probe_pkl explicitly. runA/runB used "
+                         "probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl.")
     layer = int(_pop_arg("probe_layer", "16"))
     _install_probe_reward(probe_pkl, hybrid, layer)
 

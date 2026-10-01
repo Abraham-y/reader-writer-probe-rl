@@ -15,7 +15,7 @@ final-mode style, the workshop's notice, and no leftover blind-review wording.
 And it fails while any `CAMERA-READY TODO` remains in the tex, so an open item
 cannot be uploaded by accident.
 
-    python scripts/verify_camera_ready.py [--tex writeup_interpscience.tex] [--n_boot 500]
+    python scripts/verify_camera_ready.py [--tex writeup_interpscience.tex]
 """
 from __future__ import annotations
 
@@ -35,6 +35,9 @@ sys.path.insert(0, os.path.join(_ROOT, "followup", "experiments", "fragility", "
 ACTS = os.path.join(_ROOT, "followup", "acts", "phase0_harvest_runA")
 JUDGE = os.path.join(_ROOT, "followup", "results", "fragility", "judge_lag")
 CPJ = os.path.join(_ROOT, "followup", "results", "fragility", "changepoint_lag.json")
+# check_everything.sh runs changepoint_lag.py first and writes here; read that
+# fresh recomputation rather than the committed file whenever it exists.
+CPJ_FRESH = os.environ.get("CHANGEPOINT_JSON", "/tmp/_cp.json")
 CLEAN = os.path.join(_ROOT, "extension", "cache", "probe_cache_n500_clean406",
                      "C_outcome_l16_pre_answer.meta.json")
 STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
@@ -100,56 +103,29 @@ def accuracy_lead(tex):
         gap = max(gap, abs(lab[s].first_block.mean() - np.mean([r["correct"] for r in j])))
     check("max first-block gap, probe vs judge ladder", gap, "0.016", 0.0015, tex)
 
-    cp = json.load(open(CPJ))["paired_auroc_diffs"]
+    cp = json.load(open(CPJ_FRESH if os.path.exists(CPJ_FRESH) else CPJ))["paired_auroc_diffs"]
     pmin = min(cp[f"0-{s}"]["p"] for s in (10, 20, 30, 40))
-    check("smallest AUROC p, steps 10-40", pmin, "0.22", 0.005, tex)
+    # p-values come from the suite's 500-draw recomputation; at p ~ 0.2 the
+    # Monte-Carlo error of a 500-draw bootstrap p is ~0.02, so allow 0.04
+    check("smallest AUROC p, steps 10-40", pmin, "0.22", 0.04, tex)
     check("AUROC change at step 50", -cp["0-50"]["delta"], "-0.086", 0.0015, tex)
     if pmin < 0.05 or cp["0-50"]["p"] >= 0.05:
         bad.append("the AUROC's flat window through step 40 / break at 50 no longer holds")
 
 
-def overlap(tex, n_boot):
-    print(f"\n=== the lag on prompts the reward probe never saw (appendix F; {n_boot} draws) ===")
-    from overlap_split import compute  # noqa: E402
-    res = compute(n_boot=n_boot, seed=0, verbose=False)["subsets"]
-    U, S = res["unseen"], res["seen"]
-
-    check("unseen prompts", U["n_prompts"], "158", 0, tex)
-    check("seen prompts", S["n_prompts"], "248", 0, tex)
-    check("unseen AUROC, step 0", U["per_step"][0]["auroc"], "0.778", 0.0015, tex)
-    check("seen AUROC, step 0", S["per_step"][0]["auroc"], "0.785", 0.0015, tex)
-    check("unseen flag change, step 10", U["per_step"][10]["d_flag"][0], "+0.020", 0.0015, tex)
-    check("unseen flag p, step 10", U["per_step"][10]["d_flag"][3], "0.146", 0.06, tex)
-    for name, sub, auc_at, flag_at in (("unseen", U, 50, 20), ("seen", S, 50, 10)):
-        ok = sub["first_auroc_move"] == auc_at and sub["first_flag_move"] == flag_at
-        print(f"  {name + ' first moves (AUROC, flag)':<48} recomputed "
-              f"({sub['first_auroc_move']}, {sub['first_flag_move']})   paper ({auc_at}, {flag_at})"
-              f"   {'OK' if ok else 'MISMATCH'}")
-        if not ok:
-            bad.append(f"{name}: first moves are ({sub['first_auroc_move']}, "
-                       f"{sub['first_flag_move']}), paper says ({auc_at}, {flag_at})")
-
-    # Table 5, cell by cell
-    m = re.search(r"multicolumn\{4\}\{c\}\{158 prompts the probe never saw\}.*?\\midrule(.*?)\\bottomrule",
-                  tex, re.S)
-    if not m:
-        bad.append("Table 5 (overlap split) not found in the tex")
-        return
-    n, miss = 0, 0
-    for line in m.group(1).strip().split("\n"):
-        cells = [c.strip().rstrip("\\").strip() for c in line.split("&")]
-        s = int(cells[0])
-        for sub, vals in ((U, cells[1:5]), (S, cells[5:9])):
-            r = sub["per_step"][s]
-            pairs = [(r["auroc"], vals[0], 0.0015), (r["flag_rate"], vals[2], 0.0015)]
-            if s:
-                pairs += [(r["d_auroc"][3], vals[1], 0.06), (r["d_flag"][3], vals[3], 0.06)]
-            for got, w, tol in pairs:
-                n += 1
-                if abs(got - float(w)) > tol:
-                    miss += 1
-                    bad.append(f"Table 5 step {s}: paper {w} vs recomputed {got:.4f}")
-    print(f"  Table 5: {n - miss}/{n} cells match recomputation")
+def disjoint(tex):
+    print("\n=== the reward probe's fitting prompts vs the 406 evaluation prompts ===")
+    # By content, not index: the two files number their prompts independently,
+    # and comparing indices is what produced the retracted 248/158 split.
+    sys.path.insert(0, os.path.join(_ROOT, "scripts"))
+    from verify_reward_ladder import fitting_overlap  # noqa: E402
+    n = fitting_overlap()
+    print(f"  shared prompts (sorted numbers + target): {n}")
+    if n:
+        bad.append(f"{n} of the reward probe's fitting prompts are among the 406")
+    for stale in ("app:overlap", "never saw", "tab:overlap"):
+        if stale in tex:
+            bad.append(f"the retracted seen/unseen analysis is still referenced ({stale!r})")
 
 
 def protocols(tex):
@@ -266,7 +242,6 @@ def front_matter(tex):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tex", default="writeup_interpscience.tex")
-    ap.add_argument("--n_boot", type=int, default=500)
     a = ap.parse_args()
     tex = open(os.path.join(_ROOT, a.tex)).read()
     # the gated numbers are written in TeX math; compare against the text a
@@ -275,7 +250,7 @@ def main() -> None:
 
     front_matter(tex)
     accuracy_lead(flat)
-    overlap(flat, a.n_boot)
+    disjoint(tex)
     protocols(flat)
 
     if skipped:

@@ -222,8 +222,7 @@ def main() -> None:
     L.append("  NOTE on the (30, 80) contrast: steps 30 and 80 are the argmin and")
     L.append("  argmax of the OBSERVED series, so that contrast is selected on the")
     L.append("  data and its nominal p-value is optimistic. It is reported as")
-    L.append("  exploratory. Of the step-0 contrasts, only step 30 survives a")
-    L.append("  Bonferroni correction over the 10 tests tabulated.")
+    L.append("  exploratory and left out of the corrections below.")
     L.append("")
 
     # --- PAIRED tests on the FLAG RATE, the one label-free statistic. It was
@@ -250,6 +249,31 @@ def main() -> None:
         flag_paired[str(t)] = {"delta": float(d.mean()), "ci_lo": float(lo_),
                                "ci_hi": float(hi_), "p": float(p_)}
     fs = next((t for t in steps[1:] if flag_paired[str(t)]["p"] < 0.05), None)
+
+    # --- Multiple comparisons, COMPUTED. An earlier version printed "only step 30
+    # survives a Bonferroni correction" as a fixed string, and the paper repeated
+    # it; no code applied any correction. The family here is the judge's 20
+    # step-0 contrasts (10 AUROC, 10 flag rate). Bootstrap p-values bottom out at
+    # 1/n_boot, so at 2,000 draws the smallest attainable p is 0.0005.
+    family = ([(f"AUROC 0-{t}", paired_out[f"{steps[0]}-{t}"]["p"]) for t in steps[1:]] +
+              [(f"flag 0-{t}", flag_paired[str(t)]["p"]) for t in steps[1:]])
+    m = len(family)
+    order = sorted(range(m), key=lambda i: family[i][1])
+    holm = [False] * m
+    for rank, i in enumerate(order):
+        if family[i][1] <= 0.05 / (m - rank):
+            holm[i] = True
+        else:
+            break
+    corrections = {name: {"p": p, "bonferroni": p <= 0.05 / m, "holm": holm[i]}
+                   for i, (name, p) in enumerate(family)}
+    L.append("")
+    L.append(f"  Multiple comparisons over the judge's {m} step-0 contrasts "
+             f"(alpha 0.05; Bonferroni threshold {0.05 / m:.4f}):")
+    for name in [family[i][0] for i in order]:
+        c = corrections[name]
+        L.append(f"    {name:<12} p={c['p']:.4f}  bonferroni={'yes' if c['bonferroni'] else 'no':<4}"
+                 f"holm={'yes' if c['holm'] else 'no'}")
     L.append("")
     L.append(f"  Judge flag rate departs significantly at step {fs}, and in the "
              "OPPOSITE direction to the probe's. What to watch is departure from "
@@ -337,6 +361,8 @@ def main() -> None:
     with open(p.replace(".txt", ".json"), "w") as f:
         json.dump({"steps": steps, "frozen_threshold": thr, "per_step": per,
                    "paired_auroc_diffs": out_paired,
+                   "paired_flag_diffs": flag_paired,
+                   "multiple_comparisons": corrections,
                    "changepoint": int(steps[k-1])}, f, indent=2)
     print(f"\nwrote {args.out}")
 

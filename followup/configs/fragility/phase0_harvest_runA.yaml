@@ -50,7 +50,13 @@ eval_set:
   top_p: 1.0
   top_k: -1
   max_tokens: 1024
-  stop_strings: []              # NOT set: training-time sampling had no stop string
+  # No stop string, which is how the published ladder was harvested; keep it so
+  # the ladder reproduces. NOTE: this does NOT match training. RL sampling stopped
+  # at the first "</answer>" (rloo_trainer/sampling_worker.py), so rollouts here
+  # run on past the answer the reward saw, and "last_block" labels are mostly
+  # text the policy produced after it would have stopped. first_block is the
+  # label comparable to what training graded.
+  stop_strings: []
   seed: 0
 
 arms:

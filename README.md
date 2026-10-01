@@ -223,28 +223,40 @@ before/after contrast across those files is unpaired.
 
 #### 5. Probe-as-RL-reward (Goodhart demonstration)
 
-The initialisation is `--model_name` (passed straight through to `rloo.py`); the
-reward shaping is `--reward_mode`.
+There are two probe-as-reward trainers, and they differ in where the probe
+reads its hidden state:
 
-```bash
-# runA: init from C_outcome (delayed Goodhart)
-python extension/training/probe_reward_rloo.py \
-    --model_name <C_outcome_path> --reward_mode probe \
-    --probe extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl \
-    --num_training_steps 100 --save_every_n_steps 10
+- `extension/training/probe_rloo.py` reads the **current policy's** hidden state
+  at `</think>` (a reference copy reloaded from the newest checkpoint each round).
+  This is what trained **runA** and **runB**, via `modal run modal_train.py probe_rloo -- ...`.
+- `extension/training/probe_reward_rloo.py` reads a **frozen** model's hidden
+  state (C_SFT by default), so its reward is a fixed function of the text. The
+  pre-registered **arms A and B** used this one, via
+  `followup/modal_fragility.py residual_rl` (see
+  `followup/experiments/fragility/residual_probe/HANDOFF.md`).
 
-# runB: init from C_SFT (immediate Goodhart)
-python extension/training/probe_reward_rloo.py \
-    --model_name asingh15/qwen-sft-countdown-defaultproj --reward_mode probe \
-    --probe extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl
+runA and runB were trained on 2026-06-02 (code at `613aef2`) with these
+settings, read from their W&B configs (`rloo_probe_0.5b/probe_rloo_run{A,B}_*_FINAL`):
+`--probe_pkl extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl`,
+`--model_name` and `--ref_model_name` C_outcome (runA) or
+`asingh15/qwen-sft-countdown-defaultproj` (runB), 100 steps, batch 128, group 8,
+grad-accum 128, lr 1e-5 constant, warmup 0, KL 1e-3, entropy 1e-3,
+weight decay 0.01, gradient clipping 1.0, temperature 1.0, top-p 1, top-k -1,
+max tokens 1024, save every 10 steps. They differ from C_outcome's own run
+(group 16, weight decay 1e-4, no clipping) and from the arms (weight decay 1e-4,
+no clipping). Training was not seeded.
 
-# Multiplicative shaping (verifier x probe)
-python extension/training/probe_reward_rloo.py \
-    --model_name asingh15/qwen-sft-countdown-defaultproj --reward_mode mult
-```
+Two things about reproducing runA/runB from the current code:
 
-`--reward_mode` is one of `probe | probe_gated | blend | mult`. `--reward_disable`
-reverts to the vanilla verifier reward as an A/B control.
+- `--probe_pkl` is now required. Its old default was the T=0.6 first-block probe,
+  not the reward probe, and the flag was not recorded at the time; that runA/runB
+  used the temperature-1 probe was confirmed afterwards by recomputing runB's
+  logged step-0 rewards.
+- The current `probe_rloo.py` reloads the reference model correctly on every
+  step. At `613aef2` it looked only for `latest_checkpoint`, so on the step after
+  each saved checkpoint (steps 1, 11, 21, ...) the probe read weights one update
+  old. The fix (`a73042f`) came after the runs, so the current code will not
+  reproduce them bit for bit.
 
 #### 6. Probe-best-of-K in-training selection (the hybrid that beats vanilla RLOO)
 

@@ -18,6 +18,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 fail=0
+skipped=0
 run() {
   local name="$1"; shift
   printf '%-46s' "$name"
@@ -34,33 +35,34 @@ echo "=== analysis: does the code still produce the published numbers? ==="
 run "structural baselines (selection, length)" \
     python -W ignore extension/probe/structural_baselines.py --out /tmp/_sb.txt
 run "surface battery (the decomposition)" \
-    python -W ignore extension/probe/surface_battery.py --out /tmp/_sbat.txt
+    python -W ignore extension/probe/surface_battery.py --out /tmp/_sbat.txt --fig /tmp/_dose.png
 run "template confound (section 3 table)" \
     python -W ignore scripts/quantify_structural_confound.py
 run "pre-registered arms A/B + output shape" \
-    python -W ignore extension/probe/verify_residual_arms.py
-run "the 40-step lag + scope condition" \
-    python followup/experiments/fragility/phase0_replicate/verify_lag_result.py
+    python -W ignore extension/probe/verify_residual_arms.py --out /tmp/_arms.txt
+# verify_lag_result.py is no longer run here: it checks a different estimator's
+# values (0.787, 0.772, ...) that the paper does not print. The lag the paper
+# reports is gated by the change-point test and the table check below.
 # Needs the cached activations under followup/acts/ (gitignored, ~56 MB/checkpoint).
 if [ -d followup/acts/phase0_harvest_runA/50 ]; then
   run "change-point test (prompt-clustered)" \
       python -W ignore followup/experiments/fragility/phase0_replicate/changepoint_lag.py --n_boot 500 --out /tmp/_cp.txt
 else
-  printf '%-46s%s\n' "change-point test (prompt-clustered)" "SKIP (acts not cached)"
+  printf '%-46s%s\n' "change-point test (prompt-clustered)" "SKIP (acts not cached)"; skipped=$((skipped+1))
 fi
 
 if [ -d followup/results/fragility/judge_lag ]; then
   run "LLM judge lag (judge vs verifier)" \
       python -W ignore followup/experiments/fragility/judge_lag/analyze_judge_lag.py --n_boot 500 --out /tmp/_jl.txt
 else
-  printf '%-46s%s\n' "LLM judge lag (judge vs verifier)" "SKIP (scores not pulled)"
+  printf '%-46s%s\n' "LLM judge lag (judge vs verifier)" "SKIP (scores not pulled)"; skipped=$((skipped+1))
 fi
 
 if [ -d followup/results/fragility/judge_lag ]; then
   run "judge error decomposition" \
       python -W ignore scripts/verify_judge_errors.py --out /tmp/_je.txt
 else
-  printf '%-46s%s\n' "judge error decomposition" "SKIP (scores not pulled)"
+  printf '%-46s%s\n' "judge error decomposition" "SKIP (scores not pulled)"; skipped=$((skipped+1))
 fi
 
 echo
@@ -75,7 +77,7 @@ for tex in writeup_interpscience; do
     run "lag tables: $tex" \
         python -W ignore scripts/verify_paper_tables.py --tex "$tex.tex"
   else
-    printf '%-46s%s\n' "lag tables: $tex" "SKIP (tex or acts missing)"
+    printf '%-46s%s\n' "lag tables: $tex" "SKIP (tex or acts missing)"; skipped=$((skipped+1))
   fi
 done
 
@@ -88,7 +90,7 @@ if [ -f writeup_interpscience.tex ] && [ -f extension/cache/steering/probe_pipel
   run "reward ladder: writeup_interpscience" \
       python -W ignore scripts/verify_reward_ladder.py --tex writeup_interpscience.tex
 else
-  printf '%-46s%s\n' "reward ladder" "SKIP (tex or reward probe missing)"
+  printf '%-46s%s\n' "reward ladder" "SKIP (tex or reward probe missing)"; skipped=$((skipped+1))
 fi
 
 # Table cells were gated long before prose numbers were, and the 2pp rewrite
@@ -98,7 +100,7 @@ for tex in writeup_interpscience; do
     run "prose numbers: $tex" \
         python -W ignore scripts/verify_prose_numbers.py --tex "$tex.tex"
   else
-    printf '%-46s%s\n' "prose numbers: $tex" "SKIP (tex or scores missing)"
+    printf '%-46s%s\n' "prose numbers: $tex" "SKIP (tex or scores missing)"; skipped=$((skipped+1))
   fi
 done
 
@@ -113,13 +115,21 @@ if [ -f writeup_interpscience.tex ] && [ -d followup/acts/phase0_harvest_runA/50
   run "camera-ready: writeup_interpscience" \
       python -W ignore scripts/verify_camera_ready.py --tex writeup_interpscience.tex
 else
-  printf '%-46s%s\n' "camera-ready: writeup_interpscience" "SKIP (tex or acts missing)"
+  printf '%-46s%s\n' "camera-ready: writeup_interpscience" "SKIP (tex or acts missing)"; skipped=$((skipped+1))
 fi
 
 echo
+# A skipped gate checked nothing, so it cannot count as a pass. Missing data is
+# a failure unless ALLOW_SKIP=1 says the caller knows what they are not checking.
+if [ "$skipped" -gt 0 ] && [ "${ALLOW_SKIP:-0}" != "1" ]; then
+  echo "$skipped gate(s) SKIPPED for missing inputs -- fetch them with"
+  echo "  python scripts/artifacts.py fetch"
+  echo "(or set ALLOW_SKIP=1 to accept a partial check)."
+  fail=1
+fi
 if [ "$fail" -eq 0 ]; then
   echo "All gates pass."
 else
-  echo "SOMETHING DISAGREES -- see above. Do not submit until this is green."
+  echo "SOMETHING DISAGREES OR WAS NOT CHECKED -- see above. Do not submit until this is green."
 fi
 exit "$fail"

@@ -87,7 +87,10 @@ def load(run_id: str, layer: int, arm: str) -> pd.DataFrame:
     # (step, metric, seed). metrics_io.latest() does this for the pipeline; we
     # replicate it here rather than trusting a derived file.
     if "written_utc" in d.columns:
-        d = d.sort_values("written_utc")
+        # Undated rows are the OLDEST generations. pandas sorts NaN last by
+        # default, which made keep="last" below return stale pre-relabel rows
+        # (the source of the paper's former 0.460 and 36.7%). Sort them first.
+        d = d.sort_values("written_utc", na_position="first")
     return d.drop_duplicates(subset=["checkpoint_step", "metric", "seed"], keep="last")
 
 

@@ -112,15 +112,28 @@ def main() -> None:
 
     # --- format shift: the mechanism the corrected section rests on ----------
     import re as _re
-    _canon = lambda e: _re.sub(r"[()\\s]", "", e or "")
-    _key = {}
-    for _st in (0, 99):
+    # strip parentheses and whitespace (an earlier r"[()\\s]" stripped a
+    # backslash and the letter s instead of whitespace)
+    _canon = lambda e: _re.sub(r"[()\s]", "", e or "")
+    # The fixed-function check, over EVERY checkpoint the judge scored. An
+    # earlier version keyed only steps 0 and 99 and the paper reported that
+    # subset as if it were the whole.
+    _key, _seen_at = {}, {}
+    for _st in STEPS:
         for _r in D[_st]:
             if _r["equation"]:
-                _key.setdefault((_r["prompt_idx"], _r["equation"]), []).append(_r["judge_score"])
+                k = (_r["prompt_idx"], _r["equation"])
+                _key.setdefault(k, []).append(_r["judge_score"])
+                _seen_at.setdefault(k, set()).add(_st)
     _rep = [v for v in _key.values() if len(v) > 1]
     n_repeat = len(_rep)
     n_straddle = sum(1 for v in _rep if (max(v) >= thr) != (min(v) >= thr))
+    max_straddle_gap = max([max(abs(x - thr) for x in v) for v in _rep
+                            if (max(v) >= thr) != (min(v) >= thr)] or [0.0])
+    _both = [k for k, st in _seen_at.items() if 0 in st and 99 in st]
+    n_both = len(_both)
+    n_both_straddle = sum(1 for k in _both
+                          if (max(_key[k]) >= thr) != (min(_key[k]) >= thr))
     def _noparen(st):
         c = [r for r in D[st] if r["correct"] == 1]
         return sum(1 for r in c if "(" not in (r["equation"] or "")) / len(c)
@@ -181,9 +194,10 @@ def main() -> None:
         ("AUROC change, end to end", auroc_delta,              "-0.017", 0.002, ALL),
         ("AUROC CI low",            auroc_lo,                  "-0.048", 0.004, ALL),
         ("AUROC CI high",           auroc_hi,                  "+0.014", 0.004, ALL),
-        ("p, correct stratum",      p_corr,                    "0.013", 0.006, ALL),
+        # not in the camera-ready; "0.013" there is an unrelated flag-rate p
+        ("p, correct stratum",      p_corr,                    "0.013", 0.006, LONG + SPOT),
         ("p, illegal stratum",      p_ill,                     "0.004", 0.0005, LONG),
-        ("p, middle stratum",       p_mid,                     "0.74",  0.10,  ALL),
+        ("p, middle stratum",       p_mid,                     "0.74",  0.10,  LONG + SPOT),
         ("flag rate minimum",       flag_min,                  "0.294", 0.0015, ALL),
         ("relative accuracy fall",  rel_acc,                   "58",    1.0,   ALL),
         ("relative flag fall",      rel_flag,                  "37",    1.0,   ALL),
@@ -191,8 +205,11 @@ def main() -> None:
         ("illegal share of wrong, 99", ill9,                   "43",    1.0,   ALL),
         ("precision drop, percent", prec_drop,                 "42",    1.0,   ALL),
         # the corrected mechanism: a fixed judge, changed inputs
-        ("repeated (prompt,eqn) keys", n_repeat,               "965",   0, SPOT_I),
-        ("of those, straddling thr",   n_straddle,             "one",   None, SPOT_I),
+        ("repeated (prompt,eqn) keys", n_repeat,               "4{,}651", 0, SPOT_I),
+        # short counts are checked as a phrase: a bare "8" is everywhere
+        ("of those, straddling thr",   n_straddle,             "8 cross", 0, SPOT_I),
+        ("pairs at steps 0 and 99",    n_both,                 "48 pairs", 0, SPOT_I),
+        ("of those, straddling",       n_both_straddle,        "none",  None, SPOT_I),
         ("no-paren share, step 0",     noparen0,               "0.017", 0.0015, SPOT_I),
         ("no-paren share, step 99",    noparen99,              "0.982", 0.0015, SPOT_I),
         ("matched: with parentheses",  paren_yes,              "0.746", 0.0015, SPOT_I),
@@ -206,16 +223,19 @@ def main() -> None:
     for label, got, written, tol, applies in CHECKS:
         if which not in applies:
             continue
-        if tol is None:            # spelled-out count, checked for presence only
-            print(f"  {label:<26}{got:>12.0f}{written:>11}   "
-                  f"{'OK' if (got == 1 and written in prose) else 'CHECK'}")
-            bad += 0 if (got == 1 and written in prose) else 1
+        if tol is None:            # a count written as a word
+            want = {"none": 0, "one": 1}[written]
+            ok = got == want and re.search(r"\b" + written + r"\b", prose) is not None
+            print(f"  {label:<26}{got:>12.0f}{written:>11}   {'OK' if ok else 'CHECK'}")
+            bad += 0 if ok else 1
             continue
-        want = float(written.replace("{,}", "").replace(",", "").lstrip("+"))
+        want = float(written.split()[0].replace("{,}", "").replace(",", "").lstrip("+"))
         num_ok = abs(got - want) <= tol
         # is it actually written down? skip the presence test for values that
         # legitimately appear only inside the table (none here, but be explicit)
-        in_paper = re.search(re.escape(written), prose) is not None
+        # Exact match: the number must appear as itself, not inside another
+        # number. A bare substring test passed "0.74" on 0.746 and "28" on 28.6.
+        in_paper = re.search(r"(?<![\d.])" + re.escape(written) + r"(?![\d])", prose) is not None
         status = "OK" if (num_ok and in_paper) else (
             "VALUE DRIFTED" if not num_ok else "NOT IN PROSE")
         if status != "OK":
