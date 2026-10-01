@@ -1,0 +1,12 @@
+{
+  "layer": 16,
+  "position": "</think>",
+  "arm": "raw counterpart of arm A (B = 0)",
+  "report": {
+    "auroc_heldout": 0.9778669898500226,
+    "n_rows": 6306,
+    "n_train_rows": 3319,
+    "C": 0.05,
+    "built_by": "build_raw_arm.py; refit of arm A verified identical"
+  }
+}
