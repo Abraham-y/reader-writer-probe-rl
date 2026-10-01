@@ -58,7 +58,7 @@ def main() -> None:
     auroc_c, overlap, n_unseen = arm_c()
 
     # accuracy each reward produced, as printed in the arms table
-    acc = {"A": 0.1678, "B": 0.0000, "C": 0.0734}
+    acc = {"A": 0.1678, "B": 0.0000, "C": 0.0782}
 
     rows = [("A", auroc_a, "0.834", acc["A"]),
             ("C", auroc_c, "0.861", acc["C"]),

@@ -22,10 +22,11 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(_ROOT, "scripts"))
 from verify_reward_ladder import arm_c, ARMS  # noqa: E402
 
-# first-block accuracy of the policy trained on each reward, and the paired
-# prompt-clustered CI of its difference from arm C (tab:arms; verify_residual_arms.py)
-ACC = {"A": 0.1678, "C": 0.0734, "B": 0.0000}
-DIFF_CI = {"A": (+0.0767, +0.1124), "B": (-0.0841, -0.0631)}
+# first-block accuracy of the policy trained on each reward, all three under the
+# arm protocol, and the paired prompt-clustered CI of its difference from arm C
+# (tab:arms; verify_residual_arms.py fails if these drift from the rollouts)
+ACC = {"A": 0.1678, "C": 0.0782, "B": 0.0000}
+DIFF_CI = {"A": (+0.0717, +0.1081), "B": (-0.0905, -0.0662)}
 LABEL = {"A": "arm A: surface-residualised probe",
          "C": "arm C: the raw probe (runB)",
          "B": "arm B: surface features only"}

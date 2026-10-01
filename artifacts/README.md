@@ -18,7 +18,7 @@ Abraham Yeung and Anagha Ramaswamy, Stanford University.
 Interpretability as a Science (InterpScience) Workshop, NeurIPS 2026.
 Code and paper: <https://github.com/Abraham-y/reader-writer-probe-rl>
 
-These are the 55 files (0.31 GB) that the paper's regeneration script reads. With
+These are the 56 files (0.32 GB) that the paper's regeneration script reads. With
 them, every number, table and figure in the paper regenerates on CPU, and the
 script exits non-zero if any published value disagrees with its recomputation.
 The list is not hand-picked: it was built by logging every file the script
@@ -58,7 +58,7 @@ last `<answer>` block an answer contains, with the exact Countdown verifier.
 | `extension/cache/probe_cache_n500_clean406/*` | activations (`.npz`) and first-block labels (`.meta.json`) for C_outcome's and C_SFT's headline-protocol answers (16 per prompt, temperature 0.6) | §3, the AUROC column of Table 2 |
 | `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl` | the reward probe: a scikit-learn `StandardScaler` + `LogisticRegression` pipeline | the RL reward; scored in §4.1 |
 | `extension/cache/probe_cache_temp1/C_outcome_temp1_l16_pre_answer.meta.json` | the prompts and answers the reward probe was fit on | the seen/unseen split of Appendix F |
-| `eval_*.json` | sampled answers with verifier scores: `runA` and `runB` after training and C_outcome, C_SFT (headline protocol); arms A and B (arm protocol) | §4, §4.3, Table 2 |
+| `eval_*.json` | sampled answers with verifier scores: `runA` and `runB` after training and C_outcome, C_SFT (headline protocol); arms A and B, and `runB` re-scored as arm C (arm protocol) | §4, §4.3, Table 2 |
 | `artifacts/MANIFEST.tsv` | every file above with its size and SHA-256 | `scripts/artifacts.py verify` |
 
 The two probe files are Python pickles (the `.pkl`, and `.npz` files loaded with

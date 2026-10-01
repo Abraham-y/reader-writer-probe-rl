@@ -25,6 +25,13 @@
       "first_block_acc": 0.07342980295566502,
       "published": 0.0734
     },
+    "runB, arm protocol (arm C)": {
+      "path": "eval_runB_armprotocol_step100.json",
+      "n_prompts": 406,
+      "n_rollouts": 3248,
+      "first_block_acc": 0.07820197044334976,
+      "published": 0.0782
+    },
     "Arm A, surface-residualised": {
       "path": "eval_armA_residual_step100.json",
       "n_prompts": 406,
@@ -41,6 +48,36 @@
     }
   },
   "contrasts": {
+    "Arm A, surface-residualised - runB, arm protocol (arm C)": {
+      "delta_pp": 8.95935960591133,
+      "ci_lo_pp": 7.173645320197044,
+      "ci_hi_pp": 10.80665024630542,
+      "published": {
+        "delta_pp": 8.96,
+        "ci_lo_pp": 7.17,
+        "ci_hi_pp": 10.81
+      }
+    },
+    "Arm B, surface-only - runB, arm protocol (arm C)": {
+      "delta_pp": -7.820197044334975,
+      "ci_lo_pp": -9.051724137931034,
+      "ci_hi_pp": -6.619458128078818,
+      "published": {
+        "delta_pp": -7.82,
+        "ci_lo_pp": -9.05,
+        "ci_hi_pp": -6.62
+      }
+    },
+    "runB, arm protocol (arm C) - runB, probe-as-reward from C_SFT": {
+      "delta_pp": 0.47721674876847336,
+      "ci_lo_pp": -0.6157635467980288,
+      "ci_hi_pp": 1.6009852216748777,
+      "published": {
+        "delta_pp": 0.48,
+        "ci_lo_pp": -0.62,
+        "ci_hi_pp": 1.6
+      }
+    },
     "Arm A, surface-residualised - runB, probe-as-reward from C_SFT": {
       "delta_pp": 9.436576354679802,
       "ci_lo_pp": 7.666256157635468,

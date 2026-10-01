@@ -156,7 +156,8 @@ def protocols(tex):
     print("\n=== the evaluation protocols of Table 1(b) and section 4.3 ===")
     files = {"headline": ["eval_c_outcome_n500.json", "eval_runA_postRL_n500.json",
                           "eval_runB_postRL_n500.json"],
-             "arm": ["eval_armA_residual_step100.json", "eval_armB_surface_step100.json"]}
+             "arm": ["eval_armA_residual_step100.json", "eval_armB_surface_step100.json",
+                     "eval_runB_armprotocol_step100.json"]}
     if not all(os.path.exists(os.path.join(_ROOT, f)) for fs in files.values() for f in fs):
         skipped.append("protocol checks (eval_*.json not present)")
         print("  SKIP: rollout files not present")
@@ -195,18 +196,32 @@ def protocols(tex):
 
     check("C_outcome first-block, headline", acc["eval_c_outcome_n500.json"], "0.550", 0.0015, tex)
     check("runA first-block, headline", acc["eval_runA_postRL_n500.json"], "0.236", 0.0015, tex)
-    check("runB (arm C) first-block, headline", acc["eval_runB_postRL_n500.json"], "0.0734", 0.00015, tex)
+    check("runB first-block, headline (arm C's first score)", acc["eval_runB_postRL_n500.json"], "0.0734", 0.00015, tex)
+    check("arm C (runB) first-block, arm protocol", acc["eval_runB_armprotocol_step100.json"], "0.0782", 0.00015, tex)
     check("arm A first-block, arm protocol", acc["eval_armA_residual_step100.json"], "0.1678", 0.00015, tex)
     check("arm B first-block, arm protocol", acc["eval_armB_surface_step100.json"], "0.0000", 0.00015, tex)
-    j = {s: np.mean([json.loads(l)["correct"] for l in open(f"{JUDGE}/step_{s}.jsonl")])
-         for s in (0, 99)}
-    worst = max(abs(acc["eval_c_outcome_n500.json"] - j[0]),
-                abs(acc["eval_runA_postRL_n500.json"] - j[99]))
-    ok = worst <= 0.01 and "within one point" in tex
-    print(f"  {'protocols agree on runA within one point':<48} worst gap {worst:.4f}   "
-          f"{'OK' if ok else 'MISMATCH'}")
-    if not ok:
-        bad.append(f"headline vs arm-style protocol gap on runA is {worst:.4f}, paper says within one point")
+    # Table 2 puts all three arms on the arm protocol. Recompute its two contrasts
+    # and the protocol's own effect on arm C with the arms gate's estimator.
+    sys.path.insert(0, os.path.join(_ROOT, "extension", "probe"))
+    import verify_residual_arms as arms_gate  # noqa: E402
+    keep = arms_gate.clean_prompts()
+    per = {f: arms_gate.load_arm(f, keep) for f in
+           ("eval_armA_residual_step100.json", "eval_armB_surface_step100.json",
+            "eval_runB_armprotocol_step100.json", "eval_runB_postRL_n500.json")}
+    c_arm = per["eval_runB_armprotocol_step100.json"]
+    for label, treat, ref, w_pt, w_ci in (
+            ("arm A - arm C (Table 2)", "eval_armA_residual_step100.json", c_arm, "+8.96", "[+7.17,+10.81]"),
+            ("arm B - arm C (Table 2)", "eval_armB_surface_step100.json", c_arm, "-7.82", "[-9.05,-6.62]"),
+            ("arm C: arm - headline protocol", "eval_runB_armprotocol_step100.json",
+             per["eval_runB_postRL_n500.json"], "+0.48", "[-0.62, +1.60]")):
+        d, lo, hi = arms_gate.paired_bootstrap(per[treat], ref, 10000, 0)
+        check(label + ", pp", d, w_pt, 0.006, tex)
+        lo_w, hi_w = (float(x) for x in w_ci.strip("[]").split(","))
+        ok = abs(lo - lo_w) < 0.1 and abs(hi - hi_w) < 0.1 and w_ci in tex
+        print(f"  {label + ' CI':<48} recomputed [{lo:+.2f}, {hi:+.2f}]   paper {w_ci:>14}   "
+              f"{'OK' if ok else 'MISMATCH'}")
+        if not ok:
+            bad.append(f"{label} CI: recomputed [{lo:.2f}, {hi:.2f}], paper {w_ci}")
 
 
 def front_matter(tex):

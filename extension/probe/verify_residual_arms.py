@@ -75,6 +75,10 @@ DEFAULT_ARMS = [
     ("C_outcome (verifier RL)", "eval_c_outcome_FIXEDSTOP_n500.json"),
     ("published probe-as-reward", "eval_runA_postRL_n500.json"),
     ("runB, probe-as-reward from C_SFT", "eval_runB_postRL_n500.json"),
+    # The same runB checkpoint re-scored under the arms' own protocol (8 answers
+    # per prompt, temperature 1), so arm C in the paper's Table 2 sits on the
+    # same evaluation as arms A and B. Added for the camera-ready, 2026-09-30.
+    ("runB, arm protocol (arm C)", "eval_runB_armprotocol_step100.json"),
     ("Arm A, surface-residualised", "eval_armA_residual_step100.json"),
     ("Arm B, surface-only", "eval_armB_surface_step100.json"),
 ]
@@ -99,6 +103,12 @@ DEFAULT_ARMS = [
 # is what let the wrong comparison through. Both are computed below and labelled,
 # and the init-matched one is the one to report.
 CONTRASTS = [
+    # what the camera-ready reports: every arm on the arm protocol
+    ("Arm A, surface-residualised", "runB, arm protocol (arm C)"),
+    ("Arm B, surface-only", "runB, arm protocol (arm C)"),
+    # how much the protocol itself moves arm C
+    ("runB, arm protocol (arm C)", "runB, probe-as-reward from C_SFT"),
+    # the submission's comparisons, kept so their published values stay checked
     ("Arm A, surface-residualised", "runB, probe-as-reward from C_SFT"),
     ("Arm A, surface-residualised", "published probe-as-reward"),
     ("Arm B, surface-only", "runB, probe-as-reward from C_SFT"),
@@ -111,6 +121,7 @@ INIT = {
     "C_outcome (verifier RL)": "C_SFT",
     "published probe-as-reward": "C_outcome",
     "runB, probe-as-reward from C_SFT": "C_SFT",
+    "runB, arm protocol (arm C)": "C_SFT",
     "Arm A, surface-residualised": "C_SFT",
     "Arm B, surface-only": "C_SFT",
 }
@@ -120,11 +131,15 @@ INIT = {
 PUBLISHED = {
     "C_outcome (verifier RL)": 0.5306,
     "runB, probe-as-reward from C_SFT": 0.0734,
+    "runB, arm protocol (arm C)": 0.0782,
     "published probe-as-reward": 0.2361,
     "Arm A, surface-residualised": 0.1678,
     "Arm B, surface-only": 0.0000,
 }
 PUBLISHED_CONTRASTS = {
+    ("Arm A, surface-residualised", "runB, arm protocol (arm C)"): (8.96, 7.17, 10.81),
+    ("Arm B, surface-only", "runB, arm protocol (arm C)"): (-7.82, -9.05, -6.62),
+    ("runB, arm protocol (arm C)", "runB, probe-as-reward from C_SFT"): (0.48, -0.62, 1.60),
     ("Arm A, surface-residualised", "runB, probe-as-reward from C_SFT"): (9.44, 7.67, 11.24),
     ("Arm A, surface-residualised", "published probe-as-reward"): (-6.83, -8.90, -4.83),
     ("Arm B, surface-only", "runB, probe-as-reward from C_SFT"): (-7.34, -8.41, -6.31),
@@ -273,15 +288,17 @@ def main() -> None:
         acc = float(flat.mean())
         pub = PUBLISHED.get(label)
         ok = "" if pub is None else ("  ok" if abs(acc - pub) < 5e-4 else "  DIFF")
+        if ok == "  DIFF":
+            failures.append(f"{label}: accuracy {acc:.4f}, published {pub:.4f}")
         L.append(f"  {label:34s}{len(per):>9}{len(flat):>10}{acc:>9.4f}"
                  f"{'' if pub is None else format(pub, '>11.4f')}{ok}")
         results[label] = {"path": path, "n_prompts": len(per), "n_rollouts": len(flat),
                           "first_block_acc": acc, "published": pub}
     L.append("")
-    L.append("  Note the rollout counts: the arms were evaluated at 8 responses per")
-    L.append("  prompt and the references at 16. The bootstrap below pairs on PROMPTS")
-    L.append("  and uses per-prompt means, so the contrast is well defined; the arms'")
-    L.append("  per-prompt means are simply the noisier side.")
+    L.append("  Note the rollout counts: the arms and the arm-protocol runB were")
+    L.append("  evaluated at 8 responses per prompt and temperature 1, the headline")
+    L.append("  references at 16 and temperature 0.6. The bootstrap pairs on PROMPTS")
+    L.append("  and uses per-prompt means, so mixed counts are well defined.")
     L.append("")
 
     L.append(f"  {'contrast':56s}{'delta pp':>10}{'95% CI (pp)':>22}")
@@ -295,7 +312,14 @@ def main() -> None:
         cross = INIT.get(treat) != INIT.get(ref)
         flag = ""
         if pub is not None:
-            flag = "  ok" if abs(d - pub[0]) < 0.05 else "  DIFF"
+            # point estimate to the printed 2 dp; interval ends to 0.1 pp, the
+            # Monte-Carlo slack of a 10k-draw bootstrap
+            good = (abs(d - pub[0]) < 0.006 and abs(lo - pub[1]) < 0.1
+                    and abs(hi - pub[2]) < 0.1)
+            flag = "  ok" if good else "  DIFF"
+            if not good:
+                failures.append(f"{treat} - {ref}: {d:+.2f} [{lo:+.2f}, {hi:+.2f}], "
+                                f"published {pub[0]:+.2f} [{pub[1]:+.2f}, {pub[2]:+.2f}]")
         tag = "  CROSS-INIT, do not report" if cross else "  init-matched"
         L.append(f"  {treat + ' - ' + ref:56s}{d:>+10.2f}   [{lo:+7.2f}, {hi:+7.2f}]{flag}{tag}")
         if pub is not None:
@@ -306,9 +330,10 @@ def main() -> None:
             {"delta_pp": pub[0], "ci_lo_pp": pub[1], "ci_hi_pp": pub[2]},
         }
     L.append("")
-    L.append("  Arm A's pre-registered prediction was that it would collapse LESS than")
-    L.append("  the published run. It collapsed more, outside the interval. That is a")
-    L.append("  falsified prediction and is reported as one.")
+    L.append("  Arm A's pre-registered prediction was that it would collapse less than")
+    L.append("  the raw-probe run. Against the init-matched reference (runB, arm C) it")
+    L.append("  did; against runA, which starts from C_outcome, the sign flips, which")
+    L.append("  is why only the init-matched contrast is reported.")
 
     # --- Arm B is only interesting if the output is not degenerate -----------
     L.append("")
