@@ -103,7 +103,10 @@ DEFAULT_ARMS = [
 # is what let the wrong comparison through. Both are computed below and labelled,
 # and the init-matched one is the one to report.
 CONTRASTS = [
-    # what the camera-ready reports: every arm on the arm protocol
+    # what the camera-ready's Table 2 reports: arm A is the controlled reference
+    ("Arm B, surface-only", "Arm A, surface-residualised"),
+    ("runB, arm protocol (arm C)", "Arm A, surface-residualised"),
+    # every arm on the arm protocol, against arm C
     ("Arm A, surface-residualised", "runB, arm protocol (arm C)"),
     ("Arm B, surface-only", "runB, arm protocol (arm C)"),
     # how much the protocol itself moves arm C
@@ -137,6 +140,8 @@ PUBLISHED = {
     "Arm B, surface-only": 0.0000,
 }
 PUBLISHED_CONTRASTS = {
+    ("Arm B, surface-only", "Arm A, surface-residualised"): (-16.78, -18.97, -14.66),
+    ("runB, arm protocol (arm C)", "Arm A, surface-residualised"): (-8.96, -10.81, -7.17),
     ("Arm A, surface-residualised", "runB, arm protocol (arm C)"): (8.96, 7.17, 10.81),
     ("Arm B, surface-only", "runB, arm protocol (arm C)"): (-7.82, -9.05, -6.62),
     ("runB, arm protocol (arm C)", "runB, probe-as-reward from C_SFT"): (0.48, -0.62, 1.60),

@@ -48,8 +48,10 @@ skipped: list[str] = []
 
 def check(label, got, written, tol, tex):
     """`got` must be within tol of `written`, and `written` must be in the paper."""
-    ok_val = tol is None or abs(got - float(written.replace("+", ""))) <= tol
-    ok_tex = written in tex
+    num = float(written.replace("{,}", "").replace(",", "").replace("+", ""))
+    ok_val = tol is None or abs(got - num) <= tol
+    # exact token: the number must not sit inside a longer number
+    ok_tex = re.search(r"(?<![\d.])" + re.escape(written) + r"(?![\d])", tex) is not None
     flag = "OK" if ok_val and ok_tex else "MISMATCH"
     print(f"  {label:<48} recomputed {got:>9.4f}   paper {written:>14}   {flag}")
     if not ok_val:
@@ -104,6 +106,13 @@ def accuracy_lead(tex):
     check("max first-block gap, probe vs judge ladder", gap, "0.016", 0.0015, tex)
 
     cp = json.load(open(CPJ_FRESH if os.path.exists(CPJ_FRESH) else CPJ))["paired_auroc_diffs"]
+    first = json.load(open(os.path.join(_ROOT, "followup", "results", "fragility", "changepoint_lag_firstblock.json")))
+    check("first-block AUROC, step 0", first["per_step"]["0"]["auroc"], "0.919", 0.0015, tex)
+    check("first-block AUROC change at step 20", -first["paired_auroc_diffs"]["0-20"]["delta"], "+0.017", 0.0015, tex)
+    check("first-block AUROC change at step 40", -first["paired_auroc_diffs"]["0-40"]["delta"], "-0.043", 0.0015, tex)
+    if first["paired_auroc_diffs"]["0-40"]["p"] >= 0.05 or first["paired_auroc_diffs"]["0-30"]["p"] < 0.05:
+        bad.append("first-block AUROC no longer first moves at step 40")
+    check("last-block AUROC, step 0", json.load(open(CPJ))["per_step"]["0"]["auroc"], "0.783", 0.0015, tex)
     pmin = min(cp[f"0-{s}"]["p"] for s in (10, 20, 30, 40))
     # p-values come from the suite's 500-draw recomputation; at p ~ 0.2 the
     # Monte-Carlo error of a 500-draw bootstrap p is ~0.02, so allow 0.04
@@ -185,19 +194,159 @@ def protocols(tex):
            ("eval_armA_residual_step100.json", "eval_armB_surface_step100.json",
             "eval_runB_armprotocol_step100.json", "eval_runB_postRL_n500.json")}
     c_arm = per["eval_runB_armprotocol_step100.json"]
+    a_arm = per["eval_armA_residual_step100.json"]
     for label, treat, ref, w_pt, w_ci in (
-            ("arm A - arm C (Table 2)", "eval_armA_residual_step100.json", c_arm, "+8.96", "[+7.17,+10.81]"),
-            ("arm B - arm C (Table 2)", "eval_armB_surface_step100.json", c_arm, "-7.82", "[-9.05,-6.62]"),
+            ("arm B - arm A (Table 2)", "eval_armB_surface_step100.json", a_arm, "-16.78", "[-18.97,-14.66]"),
+            ("arm C - arm A (Table 2)", "eval_runB_armprotocol_step100.json", a_arm, "-8.96", "[-10.81,-7.17]"),
+            ("arm A - arm C (section 4.3 prose)", "eval_armA_residual_step100.json", c_arm, "+8.96", "[+7.17,+10.81]"),
             ("arm C: arm - headline protocol", "eval_runB_armprotocol_step100.json",
              per["eval_runB_postRL_n500.json"], "+0.48", "[-0.62, +1.60]")):
         d, lo, hi = arms_gate.paired_bootstrap(per[treat], ref, 10000, 0)
         check(label + ", pp", d, w_pt, 0.006, tex)
         lo_w, hi_w = (float(x) for x in w_ci.strip("[]").split(","))
-        ok = abs(lo - lo_w) < 0.1 and abs(hi - hi_w) < 0.1 and w_ci in tex
+        ok = abs(lo - lo_w) < 0.1 and abs(hi - hi_w) < 0.1 and (w_ci in tex or "prose" in label)
         print(f"  {label + ' CI':<48} recomputed [{lo:+.2f}, {hi:+.2f}]   paper {w_ci:>14}   "
               f"{'OK' if ok else 'MISMATCH'}")
         if not ok:
             bad.append(f"{label} CI: recomputed [{lo:.2f}, {hi:.2f}], paper {w_ci}")
+
+
+def revision_numbers(tex):
+    """Every number the 2026-10-01 audit revision introduced, recomputed."""
+    print("\n=== numbers introduced by the audit revision ===")
+    import pickle, re as _re
+    sys.path.insert(0, os.path.join(_ROOT, "followup", "experiments", "fragility", "phase0_replicate"))
+    from changepoint_lag import load_checkpoint  # noqa: E402
+    probe = pickle.load(open(os.path.join(_ROOT, "extension", "cache", "steering",
+                                          "probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl"), "rb"))
+    lad = {s: load_checkpoint("phase0_harvest_runA", s, 16)[0] for s in (0, 10, 20, 30, 40)}
+    check("mean probe score, step 0", lad[0].mean(), "0.473", 0.0015, tex)
+    check("mean probe score, step 40", lad[40].mean(), "0.677", 0.0015, tex)
+    check("share above 0.95, step 0 (%)", 100 * (lad[0] > 0.95).mean(), "5.2", 0.05, tex)
+    check("share above 0.95, step 40 (%)", 100 * (lad[40] > 0.95).mean(), "38.8", 0.05, tex)
+    t0 = float(np.quantile(lad[0], 0.5))
+    check("attacked flag-rate change, step 30 (%)",
+          100 * ((lad[30] >= t0).mean() / (lad[0] >= t0).mean() - 1), "+20.2", 0.05, tex)
+
+    # the old control ladder, scored with the reward probe
+    C = os.path.join(_ROOT, "followup", "acts", "vanilla_rloo_ladder")
+    st = sorted(int(x) for x in os.listdir(C) if x.isdigit())
+    sc = {x: probe.predict_proba(np.load(f"{C}/{x}/16.npy"))[:, 1] for x in st}
+    lb = {x: pd.read_parquet(f"{C}/{x}/labels.parquet") for x in st}
+    sat = max((sc[x] > 0.95).mean() for x in st)
+    ok = sat < 0.09 and "below 9\\%" in tex
+    print(f"  {'control share above 0.95, max over steps':<48} recomputed {sat:>9.4f}   paper   below 9%   {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append(f"control saturation {sat:.3f}; paper says below 9%")
+    common = set.intersection(*[set(lb[x].prompt_idx) for x in st])
+    thr = float(np.quantile(sc[0], 0.5))
+    fr = {x: (sc[x][lb[x].prompt_idx.isin(common).values] >= thr).mean() for x in st}
+    band = max(100 * (fr[x] / fr[0] - 1) for x in st)
+    check("benign flag-rate band, common prompts (%)", band, "+18.3", 0.05, tex)
+    check("control prompts shared by all checkpoints", len(common), "166", 0, tex)
+
+    # the reward probe on C_outcome's headline answers, first block, all 406
+    sys.path.insert(0, os.path.join(_ROOT, "scripts"))
+    import verify_reward_ladder as vrl  # noqa: E402
+    P = os.path.join(_ROOT, "extension", "cache", "probe_cache_n500_clean406", "C_outcome_l16_pre_answer")
+    meta = json.load(open(P + ".meta.json"))
+    from sklearn.metrics import roc_auc_score  # noqa: E402
+    y1 = vrl._first_block_labels(meta)
+    s406 = probe.predict_proba(np.load(P + ".npz", allow_pickle=True)["X"])[:, 1]
+    check("reward probe, all 406, first block", roc_auc_score(y1, s406), "0.951", 0.0015, tex)
+    def w_in(path):
+        pipe = pickle.load(open(path, "rb"))
+        return pipe.steps[-1][1].coef_.ravel() / pipe.steps[0][1].scale_
+    r = w_in(os.path.join(_ROOT, "extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl"))
+    t = w_in(os.path.join(_ROOT, "extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl"))
+    check("cosine, reward vs trace-final probe", r @ t / np.linalg.norm(r) / np.linalg.norm(t), "0.192", 0.0015, tex)
+
+    # template score, matched headline protocol, first block, 406
+    from quantify_structural_confound import template_score  # noqa: E402
+    from evaluation.countdown import evaluate_equation, validate_equation  # noqa: E402
+    keep = {m["prompt_idx"] for m in meta}
+    AN = _re.compile(r"<answer>(.*?)</answer>", _re.S)
+    def fb(x, r_):
+        m = AN.search(x)
+        if not m or not validate_equation(m.group(1).strip(), list(r_["nums"])):
+            return 0
+        v = evaluate_equation(m.group(1).strip())
+        return int(v is not None and abs(v - int(r_["target"])) < 1e-5)
+    for f, w_mean, w_r in (("eval_c_outcome_n500.json", "1.81", "+0.643"), ("eval_runB_postRL_n500.json", "4.32", "+0.023")):
+        rows = [json.loads(l) for l in open(os.path.join(_ROOT, f)) if l.strip()]
+        ts = np.array([template_score(x) for i, r_ in enumerate(rows) if i in keep for x in r_["response"]])
+        yy = np.array([fb(x, r_) for i, r_ in enumerate(rows) if i in keep for x in r_["response"]])
+        check(f"template score, {f}", ts.mean(), w_mean, 0.005, tex)
+        check(f"template r with correctness, {f}", np.corrcoef(ts, yy)[0, 1], w_r, 0.0015, tex)
+
+    # the judge: no-answer rows at step 0, the dip without them, corrections
+    J = os.path.join(_ROOT, "followup", "results", "fragility", "judge_lag")
+    D = {x: [json.loads(l) for l in open(f"{J}/step_{x}.jsonl")] for x in (0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99)}
+    na = {x: sum(r_["equation"] is None for r_ in D[x]) for x in D}
+    check("judge no-answer rows at step 0", na[0], "108", 0, tex)
+    ok = max(v for x, v in na.items() if x) == 6 and "at most 6" in tex
+    print(f"  {'judge no-answer rows, max at later steps':<48} recomputed {max(v for x, v in na.items() if x):>9}   paper  at most 6   {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append("judge no-answer count at later steps disagrees with 'at most 6'")
+    def ar(x, drop):
+        rr = [r_ for r_ in D[x] if not (drop and r_["equation"] is None)]
+        return np.array([r_["correct"] for r_ in rr]), np.array([r_["judge_score"] for r_ in rr])
+    check("judge step-0 AUROC without no-answer rows", roc_auc_score(*ar(0, True)), "0.769", 0.0015, tex)
+    check("judge dip without no-answer rows", roc_auc_score(*ar(30, True)) - roc_auc_score(*ar(0, True)), "-0.015", 0.0015, tex)
+    ok = sum(r_["judge_score"] == 0.0 for x in D for r_ in D[x]) == 2 and "Two of the 35{,}728" in tex
+    print(f"  {'judge rows scoring exactly 0':<48} {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append("judge zero-score count disagrees with Appendix A")
+    mc = json.load(open(os.path.join(_ROOT, "followup", "results", "fragility", "judge_lag_n2000.json")))["multiple_comparisons"]
+    want = {"AUROC 0-30": ("holm", True), "flag 0-30": ("holm", True), "flag 0-20": ("holm", False),
+            "flag 0-40": ("bonferroni", True), "flag 0-30 ": ("bonferroni", False)}
+    for name, (rule, val) in want.items():
+        got = mc[name.strip()][rule]
+        print(f"  {'correction: ' + name.strip() + ' survives ' + rule:<48} recomputed {got!s:>9}   paper {val!s:>14}   {'OK' if got == val else 'MISMATCH'}")
+        if got != val:
+            bad.append(f"{name.strip()} under {rule}: computed {got}, paper says {val}")
+
+    # arm B: output form and the reward's weights
+    sys.path.insert(0, os.path.join(_ROOT, "followup", "experiments", "fragility", "residual_probe"))
+    import surface_residual_probe as srp  # noqa: E402
+    b = srp.load_any(os.path.join(_ROOT, "followup/experiments/fragility/residual_probe/probe_surface_only.pkl"))
+    w = dict(zip(b.keys, np.asarray(b.scorer.w).ravel()))
+    check("arm B weight tail_len", w["tail_len"], "+1.19", 0.005, tex)
+    check("arm B weight ans_len", w["ans_len"], "+0.62", 0.005, tex)
+    check("arm B weight n_equals", w["n_equals"], "-1.11", 0.005, tex)
+    rows = [json.loads(l) for l in open(os.path.join(_ROOT, "eval_armB_surface_step100.json")) if l.strip()]
+    blocks = [AN.search(x) for i, r_ in enumerate(rows) if i in keep for x in r_["response"]]
+    has = [m for m in blocks if m]
+    check("arm B answers with an <answer> block", len(has), "3{,}244", 0, tex)
+    check("arm B blocks that are arithmetic (%)",
+          100 * sum(evaluate_equation(m.group(1).strip()) is not None for m in has) / len(has), "0.12", 0.005, tex)
+    # contribution 1 restates A - B rounded
+    sys.path.insert(0, os.path.join(_ROOT, "extension", "probe"))
+    import verify_residual_arms as arms_gate  # noqa: E402
+    kp = arms_gate.clean_prompts()
+    d, lo, hi = arms_gate.paired_bootstrap(arms_gate.load_arm("eval_armA_residual_step100.json", kp),
+                                           arms_gate.load_arm("eval_armB_surface_step100.json", kp), 10000, 0)
+    check("arm A - arm B, pp (contribution 1)", d, "16.8", 0.05, tex)
+    ok = abs(lo - 14.7) < 0.1 and abs(hi - 19.0) < 0.1 and "[14.7, 19.0]" in tex
+    print(f"  {'arm A - arm B CI (contribution 1)':<48} recomputed [{lo:.1f}, {hi:.1f}]   paper [14.7, 19.0]   {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append(f"A - B CI [{lo:.2f}, {hi:.2f}] vs paper [14.7, 19.0]")
+
+    # small facts in the setup and appendices
+    for f, w_ in (("eval_c_sft_n500.json", "0.290"),):
+        rows = [json.loads(l) for l in open(os.path.join(_ROOT, f)) if l.strip()]
+        acc = np.mean([fb(x, r_) for i, r_ in enumerate(rows) if i in keep for x in r_["response"]])
+        check("C_SFT first-block, headline", acc, w_, 0.0015, tex)
+    lr = lambda yv, pv: pv[yv == 1].mean() / pv[yv == 0].mean()
+    y0 = pd.read_parquet(os.path.join(ACTS, "0", "labels.parquet"))["last_block"].values
+    y4 = pd.read_parquet(os.path.join(ACTS, "40", "labels.parquet"))["last_block"].values
+    check("LR+ change steps 0-40 (%)", 100 * (lr(y4, lad[40] >= t0) / lr(y0, lad[0] >= t0) - 1), "-31.6", 0.05, tex)
+    n_scored = {x: len(pd.read_parquet(os.path.join(ACTS, str(x), "labels.parquet"))) for x in (0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99)}
+    check("ladder answers dropped at step 0", 3248 - n_scored[0], "32", 0, tex)
+    ok = max(3248 - v for x, v in n_scored.items() if x) == 8 and "at most 8" in tex
+    print(f"  {'ladder answers dropped, max at other steps':<48} recomputed {max(3248 - v for x, v in n_scored.items() if x):>9}   paper   at most 8   {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append("ladder dropped-answer count disagrees with 'at most 8'")
 
 
 def front_matter(tex):
@@ -246,12 +395,14 @@ def main() -> None:
     tex = open(os.path.join(_ROOT, a.tex)).read()
     # the gated numbers are written in TeX math; compare against the text a
     # reader sees, with the minus signs and spacing normalised
-    flat = tex.replace("$", "").replace("{-}", "-").replace("\\,", "")
+    flat = (tex.replace("$", "").replace("{-}", "-").replace("{+}", "+")
+               .replace("{=}", "=").replace("\\,", ""))
 
     front_matter(tex)
     accuracy_lead(flat)
     disjoint(tex)
     protocols(flat)
+    revision_numbers(flat)
 
     if skipped:
         print("\nskipped: " + "; ".join(skipped))

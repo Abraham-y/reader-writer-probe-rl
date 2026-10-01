@@ -1,0 +1,122 @@
+Does an LLM judge's AUROC lag too?
+  11 checkpoints: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+  judge scored against the exact Countdown verifier on each checkpoint's
+  own freshly sampled rollouts; prompt-clustered bootstrap (2000 resamples, seed 0)
+
+  NOTE: the policy was optimised against the PROBE, not against this judge.
+  The judge is a bystander watching the same drift. Report it that way.
+
+  operating threshold frozen at step 0 (median judge score) = 0.9991
+
+    step  judge AUROC   prec@T    base    LIFT    LR+  flagrate      95% CI (AUROC)
+  -------------------------------------------------------------------------------------
+       0        0.785    0.746   0.544   1.371   2.46     0.500      [0.757, 0.813]
+      10        0.784    0.703   0.495   1.420   2.41     0.481      [0.755, 0.812]
+      20        0.761    0.699   0.506   1.380   2.26     0.474      [0.729, 0.791]
+      30        0.754    0.679   0.488   1.392   2.22     0.465      [0.723, 0.783]
+      40        0.757    0.667   0.457   1.461   2.38     0.434      [0.726, 0.785]
+      50        0.778    0.631   0.399   1.582   2.58     0.373      [0.748, 0.806]
+      60        0.787    0.558   0.307   1.815   2.84     0.331      [0.757, 0.814]
+      70        0.790    0.524   0.268   1.956   3.01     0.304      [0.761, 0.818]
+      80        0.792    0.482   0.234   2.058   3.04     0.294      [0.761, 0.820]
+      90        0.775    0.448   0.232   1.929   2.68     0.312      [0.744, 0.806]
+      99        0.769    0.429   0.226   1.896   2.57     0.317      [0.737, 0.801]
+
+  PAIRED AUROC differences (prompt-clustered; the correct test for
+  checkpoints scored on the same prompts, unlike overlapping marginal CIs):
+
+    contrast                      delta                95% CI        p
+    ------------------------------------------------------------------
+    step 0 - step 10               +0.0018   [-0.0171,+0.0209]    0.864
+    step 0 - step 20               +0.0241   [+0.0054,+0.0430]    0.011  *
+    step 0 - step 30               +0.0311   [+0.0103,+0.0524]    0.002  *
+    step 0 - step 40               +0.0281   [+0.0038,+0.0536]    0.025  *
+    step 0 - step 50               +0.0074   [-0.0210,+0.0345]    0.593
+    step 0 - step 60               -0.0015   [-0.0288,+0.0271]    0.921
+    step 0 - step 70               -0.0048   [-0.0319,+0.0231]    0.731
+    step 0 - step 80               -0.0065   [-0.0360,+0.0245]    0.673
+    step 0 - step 90               +0.0103   [-0.0197,+0.0409]    0.511
+    step 0 - step 99               +0.0163   [-0.0135,+0.0475]    0.312
+    step 30 - step 80               -0.0376   [-0.0669,-0.0088]    0.012  *
+
+  NOTE on the (30, 80) contrast: steps 30 and 80 are the argmin and
+  argmax of the OBSERVED series, so that contrast is selected on the
+  data and its nominal p-value is optimistic. It is reported as
+  exploratory and left out of the corrections below.
+
+  PAIRED flag-rate differences vs step 0 (prompt-clustered):
+
+    contrast                      delta                95% CI        p
+    ------------------------------------------------------------------
+    step 0 -> step 10              -0.0188   [-0.0391,+0.0015]    0.069
+    step 0 -> step 20              -0.0260   [-0.0474,-0.0068]    0.013  *
+    step 0 -> step 30              -0.0354   [-0.0585,-0.0111]    0.003  *
+    step 0 -> step 40              -0.0662   [-0.0933,-0.0391]    0.001  *
+    step 0 -> step 50              -0.1274   [-0.1583,-0.0936]    0.001  *
+    step 0 -> step 60              -0.1679   [-0.2017,-0.1342]    0.001  *
+    step 0 -> step 70              -0.1957   [-0.2278,-0.1622]    0.001  *
+    step 0 -> step 80              -0.2062   [-0.2398,-0.1706]    0.001  *
+    step 0 -> step 90              -0.1880   [-0.2241,-0.1524]    0.001  *
+    step 0 -> step 99              -0.1833   [-0.2180,-0.1484]    0.001  *
+
+  Multiple comparisons over the judge's 20 step-0 contrasts (alpha 0.05; Bonferroni threshold 0.0025):
+    flag 0-40    p=0.0005  bonferroni=yes holm=yes
+    flag 0-50    p=0.0005  bonferroni=yes holm=yes
+    flag 0-60    p=0.0005  bonferroni=yes holm=yes
+    flag 0-70    p=0.0005  bonferroni=yes holm=yes
+    flag 0-80    p=0.0005  bonferroni=yes holm=yes
+    flag 0-90    p=0.0005  bonferroni=yes holm=yes
+    flag 0-99    p=0.0005  bonferroni=yes holm=yes
+    AUROC 0-30   p=0.0020  bonferroni=yes holm=yes
+    flag 0-30    p=0.0030  bonferroni=no  holm=yes
+    AUROC 0-20   p=0.0110  bonferroni=no  holm=no
+    flag 0-20    p=0.0130  bonferroni=no  holm=no
+    AUROC 0-40   p=0.0250  bonferroni=no  holm=no
+    flag 0-10    p=0.0690  bonferroni=no  holm=no
+    AUROC 0-99   p=0.3120  bonferroni=no  holm=no
+    AUROC 0-90   p=0.5110  bonferroni=no  holm=no
+    AUROC 0-50   p=0.5930  bonferroni=no  holm=no
+    AUROC 0-80   p=0.6730  bonferroni=no  holm=no
+    AUROC 0-70   p=0.7310  bonferroni=no  holm=no
+    AUROC 0-10   p=0.8640  bonferroni=no  holm=no
+    AUROC 0-60   p=0.9210  bonferroni=no  holm=no
+
+  Judge flag rate departs significantly at step 20, and in the OPPOSITE direction to the probe's. What to watch is departure from the frozen operating point, not a direction.
+
+  AUROC DOES degrade significantly: 0-20, 0-30, 0-40.
+  ...and significantly RECOVERS: 30-80.
+  The series is non-monotone. Do not describe it as 'never degrades' --
+  that reads the least sensitive contrast (first vs last) off a U shape.
+
+  change-point: best split after step 40   (38.6% of resamples agree)
+  NOT IDENTIFIED -- no location holds a majority. On this series the
+  judge's AUROC has no detectable break: treat it as flat, not as
+  breaking at the argmin of a fit that is forced to return one.
+
+    step  probe AUROC  judge AUROC
+  --------------------------------
+       0        0.783        0.785
+      10        0.777        0.784
+      20        0.778        0.761
+      30        0.769        0.754
+      40        0.768        0.757
+      50        0.696        0.778
+      60        0.620        0.787
+      70        0.579        0.790
+      80        0.576        0.792
+      90        0.615        0.775
+      99        0.562        0.769
+
+  probe break: after step 50   judge: no identified break
+
+  The judge's AUROC does not move end-to-end: 0.785 [0.757,0.813] -> 0.769 [0.737,0.801].
+
+  Raw precision at the frozen threshold falls 0.746 -> 0.429 (-42%), but so does the base rate
+  (0.544 -> 0.226). PREVALENCE-ADJUSTED the flagged set gets
+  Operating point holds: LR+ 2.46 -> 2.57 (+4%). (lift 1.37 -> 1.90 is NOT evidence -- it moves with prevalence; see operating_point().)
+  So the precision fall is arithmetic, not evaluator failure. Do NOT
+  report it as the judge degrading.
+
+  What DOES move, and needs no labels at all: flag rate 0.500 -> 0.317 (-37%),
+  against an AUROC change of -2.2%.
+

@@ -24,7 +24,11 @@ import matplotlib.pyplot as plt
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _SRC = os.path.join(_ROOT, "followup", "results", "fragility", "changepoint_lag.json")
 _ACTS = os.path.join(_ROOT, "followup", "acts", "phase0_harvest_runA")
-BREAK_AT = 50          # first checkpoint where AUROC differs from step 0
+# The same AUROC series against FIRST-block labels, written by
+# changepoint_lag.py --label_rule first_block (gated against the paper's table).
+_SRC_FIRST = os.path.join(_ROOT, "followup", "results", "fragility", "changepoint_lag_firstblock.json")
+BREAK_AT = 50          # first checkpoint where the last-block AUROC differs from step 0
+BREAK_FIRST = 40       # ... and where the first-block AUROC does
 HACK_FROM = 10         # first checkpoint where accuracy (either rule) is significantly
                        # below step 0 -- a verifier fact, so the shaded span does not
                        # lean on the flag rate, whose early rise is partly by construction
@@ -59,7 +63,8 @@ def main() -> None:
     # The span over which accuracy has already fallen but the monitor's own
     # discrimination has not moved.
     for ax in (ax1, ax2):
-        ax.axvspan(HACK_FROM, BREAK_AT, color="0.90", zorder=0)
+        ax.axvspan(HACK_FROM, BREAK_FIRST, color="0.86", zorder=0)
+        ax.axvspan(BREAK_FIRST, BREAK_AT, color="0.94", zorder=0)
         ax.grid(alpha=0.25, linewidth=0.5)
 
     ax1.plot(steps, flag, "o-", color="#c0392b", lw=1.8, ms=4,
@@ -74,21 +79,31 @@ def main() -> None:
     ax1.legend(fontsize=7, loc="upper left", framealpha=0.9)
     ax1.set_ylim(0, 1.05)
 
-    ax2.plot(steps, auroc, "o-", color="#2471a3", lw=1.8, ms=4,
-             label="monitor AUROC, scored on each checkpoint's own rollouts")
-    ax2.fill_between(steps, lo, hi, color="#2471a3", alpha=0.18,
-                     label="95% prompt-clustered bootstrap CI")
-    ax2.axhline(auroc[0], color="0.45", ls=":", lw=1.2)
+    pf = json.load(open(_SRC_FIRST))["per_step"]
+    af = [pf[str(s)]["auroc"] for s in steps]
+    lof = [pf[str(s)]["ci_lo"] for s in steps]; hif = [pf[str(s)]["ci_hi"] for s in steps]
+    ax2.plot(steps, af, "s-", color="#1a5276", lw=1.8, ms=4,
+             label="probe AUROC, first-block labels (what training graded)")
+    ax2.fill_between(steps, lof, hif, color="#1a5276", alpha=0.15)
+    ax2.plot(steps, auroc, "o--", color="#5dade2", lw=1.5, ms=4,
+             label="probe AUROC, last-block labels (what the probe was fit to)")
+    ax2.fill_between(steps, lo, hi, color="#5dade2", alpha=0.18)
+    ax2.axhline(af[0], color="0.45", ls=":", lw=1.0)
+    ax2.axhline(auroc[0], color="0.45", ls=":", lw=1.0)
     ax2.set_ylabel("AUROC")
     ax2.set_xlabel("RLOO step")
-    ax2.legend(fontsize=7.5, loc="lower left", framealpha=0.9)
+    ax2.legend(fontsize=7, loc="lower left", framealpha=0.9)
 
     ax1.annotate("accuracy falling, AUROC not yet moved",
                  xy=((HACK_FROM + BREAK_AT) / 2, 0.06), ha="center",
                  fontsize=7, color="0.35")
-    ax2.annotate(f"AUROC first departs at {BREAK_AT}",
+    ax2.annotate(f"first-block AUROC departs at {BREAK_FIRST}",
+                 xy=(BREAK_FIRST, af[steps.index(BREAK_FIRST)]),
+                 xytext=(BREAK_FIRST + 12, af[0] - 0.01), fontsize=7,
+                 arrowprops=dict(arrowstyle="->", lw=0.8, color="0.35"))
+    ax2.annotate(f"last-block at {BREAK_AT}",
                  xy=(BREAK_AT, auroc[steps.index(BREAK_AT)]),
-                 xytext=(BREAK_AT + 8, auroc[0] + 0.012), fontsize=7.5,
+                 xytext=(BREAK_AT + 12, auroc[0] - 0.02), fontsize=7,
                  arrowprops=dict(arrowstyle="->", lw=0.8, color="0.35"))
 
     out = os.path.join(_ROOT, a.out)

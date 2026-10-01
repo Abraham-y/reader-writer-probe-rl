@@ -26,9 +26,10 @@ from verify_reward_ladder import arm_c, ARMS  # noqa: E402
 # arm protocol, and the paired prompt-clustered CI of its difference from arm C
 # (tab:arms; verify_residual_arms.py fails if these drift from the rollouts)
 ACC = {"A": 0.1678, "C": 0.0782, "B": 0.0000}
-DIFF_CI = {"A": (+0.0717, +0.1081), "B": (-0.0905, -0.0662)}
+# paired CI of each arm's difference from arm A, the controlled reference
+DIFF_CI = {"B": (-0.1897, -0.1466), "C": (-0.1081, -0.0717)}
 LABEL = {"A": "arm A: surface-residualised probe",
-         "C": "arm C: the raw probe (runB)",
+         "C": "arm C: the raw reward probe (runB),\nnot on the arms' recipe",
          "B": "arm B: surface features only"}
 
 
@@ -45,20 +46,20 @@ def main() -> None:
     order = sorted(auroc, key=auroc.get)
 
     fig, ax = plt.subplots(figsize=(5.6, 3.4))
-    xs = [auroc[k] for k in order]; ys = [ACC[k] for k in order]
-    ax.plot(xs, ys, "-", color="0.55", lw=1.2, zorder=1)
+    # only A and B share a recipe, so only they are joined
+    ax.plot([auroc["A"], auroc["B"]], [ACC["A"], ACC["B"]], "-", color="0.55", lw=1.2, zorder=1)
     for k in order:
-        lo = ACC["C"] + DIFF_CI[k][0] if k in DIFF_CI else None
-        hi = ACC["C"] + DIFF_CI[k][1] if k in DIFF_CI else None
+        lo = ACC["A"] + DIFF_CI[k][0] if k in DIFF_CI else None
+        hi = ACC["A"] + DIFF_CI[k][1] if k in DIFF_CI else None
         if lo is not None:
             ax.errorbar(auroc[k], ACC[k], yerr=[[ACC[k] - max(lo, 0)], [hi - ACC[k]]],
                         fmt="none", ecolor="0.35", elinewidth=1, capsize=3, zorder=2)
         ax.scatter(auroc[k], ACC[k], s=70, zorder=3,
-                   color={"A": "#2471a3", "C": "#7d3c98", "B": "#c0392b"}[k])
+                   color={"A": "#2471a3", "C": "0.6", "B": "#c0392b"}[k])
         # A and C label up-right into open space; B labels down-left, under the
         # trend line, because above it the text lands on the line itself
         dx, dy, ha, va = {"A": (0.004, 0.012, "left", "bottom"),
-                          "C": (0.004, 0.012, "left", "bottom"),
+                          "C": (-0.004, 0.022, "right", "bottom"),
                           "B": (-0.003, -0.014, "right", "top")}[k]
         ax.annotate(f"{LABEL[k]}\nAUROC {auroc[k]:.3f}, accuracy {ACC[k]:.3f}",
                     xy=(auroc[k], ACC[k]), xytext=(auroc[k] + dx, ACC[k] + dy),
@@ -66,7 +67,7 @@ def main() -> None:
 
     ax.set_xlabel("read-only AUROC of the reward")   # population and split are in the caption
     ax.set_ylabel("accuracy of the policy trained on it")
-    ax.set_xlim(0.815, 0.945); ax.set_ylim(-0.065, 0.23)
+    ax.set_xlim(0.815, 0.965); ax.set_ylim(-0.065, 0.23)
     ax.grid(alpha=0.25, linewidth=0.5)
     ax.text(0.98, 0.95, "better reader, worse policy", transform=ax.transAxes,
             ha="right", va="top", fontsize=8, color="0.3")

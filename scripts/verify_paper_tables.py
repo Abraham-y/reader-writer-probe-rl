@@ -70,6 +70,17 @@ def probe_series():
     return out
 
 
+def probe_series_first():
+    """The reward probe's AUROC on the ladder against FIRST-block labels."""
+    P = pickle.load(open(PROBE, "rb"))
+    out = {}
+    for st in STEPS:
+        X = np.load(f"{ACTS}/{st}/16.npy")
+        y = pd.read_parquet(f"{ACTS}/{st}/labels.parquet")["first_block"].values.astype(int)
+        out[st] = {"auroc": float(roc_auc_score(y, P.predict_proba(X)[:, 1]))}
+    return out
+
+
 def judge_series():
     rows, thr = {}, None
     for st in STEPS:
@@ -116,7 +127,8 @@ def _column_keys(header):
 def parse(tex, which):
     """Pull the table whose HEADER names `which` AUROC. Header, not position --
     position is exactly what the swap bug got wrong."""
-    hdr = re.search(r"(RLOO step &[^\n]*\\textbf\{" + which + r" AUROC\}[^\n]*)\\\\"
+    name = which if which.endswith("first block") else which + " AUROC"
+    hdr = re.search(r"(RLOO step &[^\n]*\\textbf\{" + re.escape(name) + r"\}[^\n]*)\\\\"
                     r".*?\\bottomrule", tex, re.S)
     if not hdr:
         # Legitimately absent in the cut-down versions (the 2pp spotlight
@@ -202,7 +214,8 @@ def main():
 
     bad = 0
     seen = 0
-    for which, truth in (("probe", probe_series), ("judge", judge_series)):
+    for which, truth in (("probe", probe_series), ("probe AUROC, first block", probe_series_first),
+                         ("judge", judge_series)):
         pub, caption = parse(tex, which)
         if pub is None:
             print(f"\n=== {which} table: absent from this tex (skipped) ===")

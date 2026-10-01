@@ -18,7 +18,7 @@ Abraham Yeung and Anagha Ramaswamy, Stanford University.
 Interpretability as a Science (InterpScience) Workshop, NeurIPS 2026.
 Code and paper: <https://github.com/Abraham-y/reader-writer-probe-rl>
 
-These are the 56 files (0.32 GB) that the paper's regeneration script reads. With
+These are the 58 files (0.32 GB) that the paper's regeneration script reads. With
 them, every number, table and figure in the paper regenerates on CPU, and the
 script exits non-zero if any published value disagrees with its recomputation.
 The list is not hand-picked: it was built by logging every file the script
@@ -57,12 +57,14 @@ last `<answer>` block an answer contains, with the exact Countdown verifier.
 | `followup/acts/vanilla_rloo_ladder/{step}/16.npy`, `labels.parquet` | the same kind of activations for five checkpoints of ordinary verifier-reward RLOO: the weak control ladder the paper describes and does not rely on | Appendix B |
 | `extension/cache/probe_cache_n500_clean406/*` | activations (`.npz`) and first-block labels (`.meta.json`) for C_outcome's and C_SFT's headline-protocol answers (16 per prompt, temperature 0.6) | §3, the AUROC column of Table 2 |
 | `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl` | the reward probe: a scikit-learn `StandardScaler` + `LogisticRegression` pipeline | the RL reward; scored in §4.1 |
-| `extension/cache/probe_cache_temp1/C_outcome_temp1_l16_pre_answer.meta.json` | the prompts and answers the reward probe was fit on | the seen/unseen split of Appendix F |
+| `eval_c_outcome_temp1_asingh_300.json` | the reward probe's fitting data: 8 temperature-1 answers to each of 300 prompts from the RL training pool | the check that none of those prompts is among the 406 (§3) |
+| `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl` | the trace-final probe (AUROC 0.982) | its cosine with the reward probe (§3) |
+| `followup/experiments/fragility/residual_probe/probe_surface_only.pkl` | arm B's reward, the 39-feature surface model | its weights (§4.3) |
 | `eval_*.json` | sampled answers with verifier scores: `runA` and `runB` after training and C_outcome, C_SFT (headline protocol); arms A and B, and `runB` re-scored as arm C (arm protocol) | §4, §4.3, Table 2 |
 | `artifacts/MANIFEST.tsv` | every file above with its size and SHA-256 | `scripts/artifacts.py verify` |
 
-The two probe files are Python pickles (the `.pkl`, and `.npz` files loaded with
-`allow_pickle=True`). Loading a pickle can execute code, so load these only from
+The probe files are Python pickles (the `.pkl` files, and `.npz` files loaded
+with `allow_pickle=True`). Loading a pickle can execute code, so load these only from
 this dataset or another source you trust.
 
 ## Provenance and licenses
