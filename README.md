@@ -77,6 +77,16 @@ deployment failures, and a 5-step run caught all of them.
 
 The anonymous version submitted for review is the git tag `interpscience-submission`.
 
+## License
+
+- **Code:** MIT ([`LICENSE`](LICENSE)). `rloo_trainer/`, `sft_trainer/`,
+  `ipo_trainer/` and `evaluation/` began as the course default-project starter
+  code by Anikait Singh, itself released under MIT; his notice is kept in
+  `LICENSE`.
+- **Paper** (`writeup_interpscience.*`, `figures/`): CC BY 4.0.
+- **Data** (the [Hugging Face dataset](https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl)): CC BY 4.0.
+- `neurips_workshop.sty` is the NeurIPS style file, included only to build the paper.
+
 ## Project history
 
 The rest of this README predates the paper and describes the wider project it
