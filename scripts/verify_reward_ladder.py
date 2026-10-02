@@ -74,6 +74,21 @@ def arm_c() -> tuple[float, int]:
     return float(roc_auc_score(y[te], scores[te])), int(te.sum())
 
 
+def arm_r() -> float:
+    """Arm R's reward probe, recomputed from the artefact it trained against."""
+    sys.path.insert(0, ARMS)
+    import surface_residual_probe as srp  # noqa: E402
+    X = np.load(POP + ".npz", allow_pickle=True)["X"]
+    meta = json.load(open(POP + ".meta.json"))
+    y = _first_block_labels(meta)
+    rows = [json.loads(l) for l in open(os.path.join(_ROOT, "eval_c_outcome_n500.json")) if l.strip()]
+    texts = [rows[m["prompt_idx"]]["response"][m["resp_idx"]] for m in meta]
+    te = heldout_mask(np.array([m["prompt_idx"] for m in meta]))
+    probe = srp.load_any(os.path.join(ARMS, "probe_raw_arm_recipe.pkl"))
+    s = probe.predict_proba(X[te], text=[texts[i] for i in np.where(te)[0]])[:, 1]
+    return float(roc_auc_score(y[te], s))
+
+
 def fitting_overlap() -> int:
     """Prompts shared by the reward probe's fit and the evaluation set, by content."""
     key = lambda r: (tuple(sorted(int(x) for x in r["nums"])), int(r["target"]))
@@ -95,11 +110,13 @@ def main() -> None:
     overlap = fitting_overlap()
 
     # accuracy each reward produced, as printed in the arms table
-    acc = {"A": 0.1678, "B": 0.0000, "C": 0.0782}
+    acc = {"A": 0.1678, "B": 0.0000, "C": 0.0782, "R": 0.0514}
+    auroc_r = arm_r()
 
     rows = [("A", auroc_a, "0.834", acc["A"]),
             ("B", auroc_b, "0.925", acc["B"]),
-            ("C", auroc_c, "0.945", acc["C"])]
+            ("C", auroc_c, "0.945", acc["C"]),
+            ("R", auroc_r, "0.978", acc["R"])]
 
     print(f"all three on the arms' held-out half ({n_rows} rows), first-block labels; "
           f"reward-probe fitting prompts inside the 406: {overlap}")
@@ -120,18 +137,20 @@ def main() -> None:
     # worse policy. (Arm C is not part of the claim: it reads highest and its
     # policy sits between the two, and it differs from A and B in more than the
     # reward -- see section 4.3.)
+    # and on the same recipe, arm R reads higher than arm A and did worse too
+    if not (auroc_r > auroc_a and acc["R"] < acc["A"]):
+        bad.append(f"A/R inversion broken: AUROC A {auroc_a:.3f} R {auroc_r:.3f}, "
+                   f"accuracy A {acc['A']} R {acc['R']}")
     if not (auroc_b > auroc_a and acc["B"] < acc["A"]):
         bad.append(f"A/B inversion broken: AUROC A {auroc_a:.3f} B {auroc_b:.3f}, "
                    f"accuracy A {acc['A']} B {acc['B']}")
     else:
         print("  arm B reads higher than arm A and trained a worse policy -- inversion holds")
 
-    # The per-checkpoint ladder tables carry hundreds of rates, and 0.978 can be
-    # a legitimate cell there. The guard is against 0.978 being quoted as a
-    # reward's AUROC (an old error), so search everything except those tables.
-    ladders = r"\\begin\{table\}(?:(?!\\end\{table\}).)*?\\label\{tab:(?:lag|judge|overlap)\}.*?\\end\{table\}"
-    if "0.978" in re.sub(ladders, " ", tex, flags=re.S):
-        bad.append("0.978 is back in the paper; it is not any reward's AUROC")
+    # A guard against "0.978" used to live here: an earlier draft quoted 0.978 as
+    # runB's (arm C's) AUROC, when it was the raw probe fit inside the arms'
+    # script. That raw probe is now arm R, so 0.978 is legitimately its AUROC, and
+    # arm C's own value (0.945) is gated above. The guard is retired.
 
     if bad:
         print("\nFAIL")

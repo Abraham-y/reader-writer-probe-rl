@@ -80,6 +80,9 @@ DEFAULT_ARMS = [
     # same evaluation as arms A and B. Added for the camera-ready, 2026-09-30.
     ("runB, arm protocol (arm C)", "eval_runB_armprotocol_step100.json"),
     ("Arm A, surface-residualised", "eval_armA_residual_step100.json"),
+    # Arm A's raw counterpart: same probe fit, no residualisation, same recipe
+    # (build_raw_arm.py). Added 2026-10-02.
+    ("Arm R, raw probe on arm A's recipe", "eval_armRaw_step100.json"),
     ("Arm B, surface-only", "eval_armB_surface_step100.json"),
 ]
 
@@ -103,6 +106,10 @@ DEFAULT_ARMS = [
 # is what let the wrong comparison through. Both are computed below and labelled,
 # and the init-matched one is the one to report.
 CONTRASTS = [
+    # arm R: the residualisation isolated, and arm B against the raw probe
+    ("Arm R, raw probe on arm A's recipe", "Arm A, surface-residualised"),
+    ("Arm A, surface-residualised", "Arm R, raw probe on arm A's recipe"),
+    ("Arm B, surface-only", "Arm R, raw probe on arm A's recipe"),
     # what the camera-ready's Table 2 reports: arm A is the controlled reference
     ("Arm B, surface-only", "Arm A, surface-residualised"),
     ("runB, arm protocol (arm C)", "Arm A, surface-residualised"),
@@ -126,6 +133,7 @@ INIT = {
     "runB, probe-as-reward from C_SFT": "C_SFT",
     "runB, arm protocol (arm C)": "C_SFT",
     "Arm A, surface-residualised": "C_SFT",
+    "Arm R, raw probe on arm A's recipe": "C_SFT",
     "Arm B, surface-only": "C_SFT",
 }
 
@@ -137,9 +145,13 @@ PUBLISHED = {
     "runB, arm protocol (arm C)": 0.0782,
     "published probe-as-reward": 0.2361,
     "Arm A, surface-residualised": 0.1678,
+    "Arm R, raw probe on arm A's recipe": 0.0514,
     "Arm B, surface-only": 0.0000,
 }
 PUBLISHED_CONTRASTS = {
+    ("Arm R, raw probe on arm A's recipe", "Arm A, surface-residualised"): (-11.64, -13.76, -9.61),
+    ("Arm A, surface-residualised", "Arm R, raw probe on arm A's recipe"): (11.64, 9.61, 13.76),
+    ("Arm B, surface-only", "Arm R, raw probe on arm A's recipe"): (-5.14, -6.25, -4.09),
     ("Arm B, surface-only", "Arm A, surface-residualised"): (-16.78, -18.97, -14.66),
     ("runB, arm protocol (arm C)", "Arm A, surface-residualised"): (-8.96, -10.81, -7.17),
     ("Arm A, surface-residualised", "runB, arm protocol (arm C)"): (8.96, 7.17, 10.81),

@@ -142,7 +142,7 @@ def protocols(tex):
     files = {"headline": ["eval_c_outcome_n500.json", "eval_runA_postRL_n500.json",
                           "eval_runB_postRL_n500.json"],
              "arm": ["eval_armA_residual_step100.json", "eval_armB_surface_step100.json",
-                     "eval_runB_armprotocol_step100.json"]}
+                     "eval_runB_armprotocol_step100.json", "eval_armRaw_step100.json"]}
     if not all(os.path.exists(os.path.join(_ROOT, f)) for fs in files.values() for f in fs):
         skipped.append("protocol checks (eval_*.json not present)")
         print("  SKIP: rollout files not present")
@@ -183,6 +183,7 @@ def protocols(tex):
     check("runA first-block, headline", acc["eval_runA_postRL_n500.json"], "0.236", 0.0015, tex)
     check("runB first-block, headline (arm C's first score)", acc["eval_runB_postRL_n500.json"], "0.0734", 0.00015, tex)
     check("arm C (runB) first-block, arm protocol", acc["eval_runB_armprotocol_step100.json"], "0.0782", 0.00015, tex)
+    check("arm R first-block, arm protocol", acc["eval_armRaw_step100.json"], "0.0514", 0.00015, tex)
     check("arm A first-block, arm protocol", acc["eval_armA_residual_step100.json"], "0.1678", 0.00015, tex)
     check("arm B first-block, arm protocol", acc["eval_armB_surface_step100.json"], "0.0000", 0.00015, tex)
     # Table 2 puts all three arms on the arm protocol. Recompute its two contrasts
@@ -192,13 +193,16 @@ def protocols(tex):
     keep = arms_gate.clean_prompts()
     per = {f: arms_gate.load_arm(f, keep) for f in
            ("eval_armA_residual_step100.json", "eval_armB_surface_step100.json",
-            "eval_runB_armprotocol_step100.json", "eval_runB_postRL_n500.json")}
+            "eval_runB_armprotocol_step100.json", "eval_runB_postRL_n500.json",
+            "eval_armRaw_step100.json")}
     c_arm = per["eval_runB_armprotocol_step100.json"]
     a_arm = per["eval_armA_residual_step100.json"]
     for label, treat, ref, w_pt, w_ci in (
             ("arm B - arm A (Table 2)", "eval_armB_surface_step100.json", a_arm, "-16.78", "[-18.97,-14.66]"),
             ("arm C - arm A (Table 2)", "eval_runB_armprotocol_step100.json", a_arm, "-8.96", "[-10.81,-7.17]"),
-            ("arm A - arm C (section 4.3 prose)", "eval_armA_residual_step100.json", c_arm, "+8.96", "[+7.17,+10.81]"),
+            ("arm R - arm A (Table 2)", "eval_armRaw_step100.json", a_arm, "-11.64", "[-13.76,-9.61]"),
+            ("arm A - arm R (section 4.3)", "eval_armA_residual_step100.json", per["eval_armRaw_step100.json"], "+11.64", "[+9.61, +13.76]"),
+            ("arm B - arm R (section 4.3)", "eval_armB_surface_step100.json", per["eval_armRaw_step100.json"], "-5.14", "[-6.25, -4.09]"),
             ("arm C: arm - headline protocol", "eval_runB_armprotocol_step100.json",
              per["eval_runB_postRL_n500.json"], "+0.48", "[-0.62, +1.60]")):
         d, lo, hi = arms_gate.paired_bootstrap(per[treat], ref, 10000, 0)
@@ -327,6 +331,17 @@ def revision_numbers(tex):
     d, lo, hi = arms_gate.paired_bootstrap(arms_gate.load_arm("eval_armA_residual_step100.json", kp),
                                            arms_gate.load_arm("eval_armB_surface_step100.json", kp), 10000, 0)
     check("arm A - arm B, pp (contribution 1)", d, "16.8", 0.05, tex)
+    dR, loR, hiR = arms_gate.paired_bootstrap(arms_gate.load_arm("eval_armA_residual_step100.json", kp),
+                                              arms_gate.load_arm("eval_armRaw_step100.json", kp), 10000, 0)
+    check("arm A - arm R, pp (contribution 1)", dR, "11.6", 0.05, tex)
+    ok = abs(loR - 9.6) < 0.1 and abs(hiR - 13.8) < 0.1 and "[9.6, 13.8]" in tex
+    print(f"  {'arm A - arm R CI (contribution 1)':<48} recomputed [{loR:.1f}, {hiR:.1f}]   paper  [9.6, 13.8]   {'OK' if ok else 'MISMATCH'}")
+    if not ok:
+        bad.append(f"A - R CI [{loR:.2f}, {hiR:.2f}] vs paper [9.6, 13.8]")
+    import surface_residual_probe as _srp  # noqa: E402
+    gap = (json.load(open(os.path.join(_ROOT, "followup/experiments/fragility/residual_probe/probe_raw_arm_recipe.pkl.meta.json")))["report"]["auroc_heldout"]
+           - json.load(open(os.path.join(_ROOT, "followup/experiments/fragility/residual_probe/probe_surface_residual_l16.pkl.meta.json")))["report"]["auroc_residual_heldout"])
+    check("AUROC lost to residualisation", gap, "0.144", 0.0015, tex)
     ok = abs(lo - 14.7) < 0.1 and abs(hi - 19.0) < 0.1 and "[14.7, 19.0]" in tex
     print(f"  {'arm A - arm B CI (contribution 1)':<48} recomputed [{lo:.1f}, {hi:.1f}]   paper [14.7, 19.0]   {'OK' if ok else 'MISMATCH'}")
     if not ok:
