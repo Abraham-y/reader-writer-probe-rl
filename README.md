@@ -17,7 +17,7 @@ to exactly zero.
 
 ## Reproducing the paper
 
-Every number, table and figure in the paper regenerates on CPU from 0.33 GB of
+Every number, table and figure in the paper regenerates on CPU from 0.35 GB of
 cached artifacts (activations, judge scores, rollouts), published as the Hugging
 Face dataset [`prismane16/monitor-accuracy-under-rl`](https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl), which mirrors
 this repository's paths:

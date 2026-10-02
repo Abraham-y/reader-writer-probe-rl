@@ -18,7 +18,7 @@ Abraham Yeung and Anagha Ramaswamy, Stanford University.
 Interpretability as a Science (InterpScience) Workshop, NeurIPS 2026.
 Code and paper: <https://github.com/Abraham-y/reader-writer-probe-rl>
 
-These are the 60 files (0.33 GB) that the paper's regeneration script reads. With
+These are the 62 files (0.35 GB) that the paper's regeneration script reads. With
 them, every number, table and figure in the paper regenerates on CPU, and the
 script exits non-zero if any published value disagrees with its recomputation.
 The list is not hand-picked: it was built by logging every file the script
@@ -61,7 +61,7 @@ last `<answer>` block an answer contains, with the exact Countdown verifier.
 | `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl` | the trace-final probe (AUROC 0.982) | its cosine with the reward probe (§3) |
 | `followup/experiments/fragility/residual_probe/probe_surface_only.pkl` | arm B's reward, the 39-feature surface model | its weights (§4.3) |
 | `followup/experiments/fragility/residual_probe/probe_raw_arm_recipe.pkl` | arm R's reward: arm A's probe fit without the residualisation (built by `build_raw_arm.py`) | its held-out AUROC (Table 2) |
-| `eval_*.json` | sampled answers with verifier scores: `runA` and `runB` after training and C_outcome, C_SFT (headline protocol); arms A, B and R, and `runB` re-scored as arm C (arm protocol) | §4, §4.3, Table 2 |
+| `eval_*.json` | sampled answers with verifier scores: `runA` and `runB` after training and C_outcome, C_SFT (headline protocol); arms A, B and R, and `runB` re-scored as arm C (arm protocol); `*_rescore.json` re-run arms A and B with the recorded arm-protocol command and reproduce their files answer for answer (Appendix C) | §4, §4.3, Table 2 |
 | `artifacts/MANIFEST.tsv` | every file above with its size and SHA-256 | `scripts/artifacts.py verify` |
 
 The probe files are Python pickles (the `.pkl` files, and `.npz` files loaded

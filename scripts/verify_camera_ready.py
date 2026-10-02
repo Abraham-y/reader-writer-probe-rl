@@ -184,6 +184,20 @@ def protocols(tex):
     check("runB first-block, headline (arm C's first score)", acc["eval_runB_postRL_n500.json"], "0.0734", 0.00015, tex)
     check("arm C (runB) first-block, arm protocol", acc["eval_runB_armprotocol_step100.json"], "0.0782", 0.00015, tex)
     check("arm R first-block, arm protocol", acc["eval_armRaw_step100.json"], "0.0514", 0.00015, tex)
+    # Arm A's evaluation command was never recorded. Re-running the arm protocol
+    # on its final checkpoint (and on arm B's, whose command was recorded) must
+    # reproduce each evaluation file answer for answer; vLLM sampling is
+    # deterministic for a fixed model and settings, so this pins the settings.
+    for orig in ("eval_armA_residual_step100.json", "eval_armB_surface_step100.json"):
+        re_ = orig.replace(".json", "_rescore.json")
+        a_ = [json.loads(l) for l in open(os.path.join(_ROOT, orig)) if l.strip()]
+        b_ = [json.loads(l) for l in open(os.path.join(_ROOT, re_)) if l.strip()]
+        same = sum(x == y for p_, q_ in zip(a_, b_) for x, y in zip(p_["response"], q_["response"]))
+        total = sum(len(p_["response"]) for p_ in a_)
+        ok = same == total and len(a_) == len(b_) and "answer for answer" in tex
+        print(f"  {'re-scored ' + orig.split('_')[1] + ' identical to original':<48} {same}/{total}   {'OK' if ok else 'MISMATCH'}")
+        if not ok:
+            bad.append(f"{orig}: re-score reproduces {same}/{total} answers")
     check("arm A first-block, arm protocol", acc["eval_armA_residual_step100.json"], "0.1678", 0.00015, tex)
     check("arm B first-block, arm protocol", acc["eval_armB_surface_step100.json"], "0.0000", 0.00015, tex)
     # Table 2 puts all three arms on the arm protocol. Recompute its two contrasts
