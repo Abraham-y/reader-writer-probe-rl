@@ -7,17 +7,18 @@ Paper: [`writeup_interpscience.pdf`](writeup_interpscience.pdf) (source [`writeu
 
 A linear probe on Qwen2.5-0.5B's hidden states predicts whether a Countdown answer
 will be correct (held-out AUROC 0.982). A second fit of the same kind, used as the
-RL reward, lowers true accuracy by 31 points, and the probe's own AUROC shows no
-significant change for 40 steps after accuracy starts to fall. A fixed LLM judge
+RL reward, lowers true accuracy by 31 points, and the probe's own AUROC does not
+fall for 30 to 40 steps after accuracy starts to. A fixed LLM judge
 scoring the same run keeps its AUROC while accuracy falls from 54% to 23%: a
 monitor's accuracy statistics describe the monitor together with the population it
-scores, and deploying the monitor moves the population. Separately, a reward built
-from 39 text features scores higher than the probe as a monitor and drives accuracy
-to exactly zero.
+scores, and deploying the monitor moves the population. Separately, of three rewards
+trained under one recipe, the one that read lowest as a monitor kept the most
+accuracy, and a reward built only from 39 text features drove accuracy to exactly
+zero. One seed each: these are counterexamples, not a trend.
 
 ## Reproducing the paper
 
-Every number, table and figure in the paper regenerates on CPU from 0.35 GB of
+Every number, table and figure in the paper regenerates on CPU from 0.36 GB of
 cached artifacts (activations, judge scores, rollouts), published as the Hugging
 Face dataset [`prismane16/monitor-accuracy-under-rl`](https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl), which mirrors
 this repository's paths:
@@ -51,7 +52,7 @@ which sponsored the compute, and the deployment code is part of this repository:
 | file | what it launches |
 |---|---|
 | `modal_train.py` | SFT, IPO and the RLOO variants (vanilla, probe-as-reward `probe_rloo`, shaped rewards), sampling (`sample_local`), activation caching and the probe analyses: `modal run modal_train.py <trainer> -- <args>` |
-| `followup/modal_fragility.py` | the checkpoint-ladder harvest (`harvest`), the judge ladder (`judge_ladder`), the pre-registered reward arms (`residual_rl`) and their evaluation (`eval_local`) |
+| `followup/modal_fragility.py` | the checkpoint-ladder harvest (`harvest`), the judge ladder (`judge_ladder`), the reward arms A, B and R (`residual_rl`) and their evaluation (`eval_local`) |
 | `modal_requirements.txt` | the container's pinned Python environment |
 | `{rloo,sft,ipo}_trainer/train_*_modal.sh`, `evaluation/sample_modal.sh` | shell launchers for the base-project runs |
 

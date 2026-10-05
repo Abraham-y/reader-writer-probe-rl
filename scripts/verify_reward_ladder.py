@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Gate the three read-only AUROCs the reward comparison rests on.
+"""Gate the four read-only AUROCs the reward comparison rests on.
 
-The comparison only means anything if all three AUROCs are on ONE population
-under ONE label rule. Arms A and B ship their AUROCs in their own artifacts,
-computed by surface_residual_probe.py on the held-out half of the clean-406
-C_outcome headline answers (prompt split by sha256 of the prompt index) with
-FIRST-block labels. Arm C, the reward probe, has no such number, so it is
-recomputed here on exactly those rows with exactly those labels.
+The comparison only means anything if all four AUROCs are on ONE population
+under ONE label rule: the held-out half of the clean-406 C_outcome headline
+answers (prompt split by sha256 of the prompt index), FIRST-block labels, read
+through C_outcome's hidden states. Every one is recomputed here from the
+artefact that was trained against. Arms A and B also record their AUROCs in
+their metadata; until 2026-10-04 this gate read those records instead of
+recomputing, and it now fails if the two disagree.
+
+These are not what the rewards scored during RL, when arms A and R read a frozen
+C_SFT; verify_camera_ready.py gates their AUROCs read through C_SFT, on C_SFT's
+own answers that have a locatable </think>.
 
 HISTORY, because this gate used to get it wrong. Until 2026-10-01 arm C was
 scored on the cache's own `y` -- which is the LAST-block label -- and restricted
@@ -89,6 +94,23 @@ def arm_r() -> float:
     return float(roc_auc_score(y[te], s))
 
 
+def arm_ab() -> tuple[float, float]:
+    """Arms A and B, recomputed from the artefacts they trained against."""
+    sys.path.insert(0, ARMS)
+    import surface_residual_probe as srp  # noqa: E402
+    X = np.load(POP + ".npz", allow_pickle=True)["X"]
+    meta = json.load(open(POP + ".meta.json"))
+    y = _first_block_labels(meta)
+    rows = [json.loads(l) for l in open(os.path.join(_ROOT, "eval_c_outcome_n500.json")) if l.strip()]
+    texts = [rows[m["prompt_idx"]]["response"][m["resp_idx"]] for m in meta]
+    te = heldout_mask(np.array([m["prompt_idx"] for m in meta]))
+    tt = [texts[i] for i in np.where(te)[0]]
+    a = srp.load_any(os.path.join(ARMS, "probe_surface_residual_l16.pkl"))
+    b = srp.load_any(os.path.join(ARMS, "probe_surface_only.pkl"))
+    return (float(roc_auc_score(y[te], a.predict_proba(X[te], text=tt)[:, 1])),
+            float(roc_auc_score(y[te], b.predict_proba(X[te], text=tt)[:, 1])))
+
+
 def fitting_overlap() -> int:
     """Prompts shared by the reward probe's fit and the evaluation set, by content."""
     key = lambda r: (tuple(sorted(int(x) for x in r["nums"])), int(r["target"]))
@@ -104,8 +126,11 @@ def main() -> None:
 
     a = json.load(open(os.path.join(ARMS, "probe_surface_residual_l16.pkl.meta.json")))
     b = json.load(open(os.path.join(ARMS, "probe_surface_only.pkl.meta.json")))
-    auroc_a = a["report"]["auroc_residual_heldout"]
-    auroc_b = b["report"]["auroc_heldout"]
+    auroc_a, auroc_b = arm_ab()
+    meta_drift = [f"arm {k}: artefact {got:.6f} vs its metadata {rec:.6f}"
+                  for k, got, rec in (("A", auroc_a, a["report"]["auroc_residual_heldout"]),
+                                      ("B", auroc_b, b["report"]["auroc_heldout"]))
+                  if abs(got - rec) > 1e-6]
     auroc_c, n_rows = arm_c()
     overlap = fitting_overlap()
 
@@ -118,9 +143,9 @@ def main() -> None:
             ("C", auroc_c, "0.945", acc["C"]),
             ("R", auroc_r, "0.978", acc["R"])]
 
-    print(f"all three on the arms' held-out half ({n_rows} rows), first-block labels; "
+    print(f"all four on the arms' held-out half ({n_rows} rows), first-block labels; "
           f"reward-probe fitting prompts inside the 406: {overlap}")
-    bad = []
+    bad = list(meta_drift)
     if overlap:
         bad.append(f"{overlap} of the reward probe's fitting prompts are in the eval set")
     for arm, got, written, accuracy in rows:
@@ -134,9 +159,8 @@ def main() -> None:
             bad.append(f"arm {arm}: {written} does not appear in {tex_name}")
 
     # the claim the paper rests on: arm B reads higher than arm A yet trained a
-    # worse policy. (Arm C is not part of the claim: it reads highest and its
-    # policy sits between the two, and it differs from A and B in more than the
-    # reward -- see section 4.3.)
+    # worse policy. (Arm C is not part of the claim: it differs from A, B and R
+    # in more than the reward -- see section 4.3.)
     # and on the same recipe, arm R reads higher than arm A and did worse too
     if not (auroc_r > auroc_a and acc["R"] < acc["A"]):
         bad.append(f"A/R inversion broken: AUROC A {auroc_a:.3f} R {auroc_r:.3f}, "

@@ -83,7 +83,7 @@ def main() -> None:
     af = [pf[str(s)]["auroc"] for s in steps]
     lof = [pf[str(s)]["ci_lo"] for s in steps]; hif = [pf[str(s)]["ci_hi"] for s in steps]
     ax2.plot(steps, af, "s-", color="#1a5276", lw=1.8, ms=4,
-             label="probe AUROC, first-block labels (what training graded)")
+             label="probe AUROC, first-block labels (what the verifier graded)")
     ax2.fill_between(steps, lof, hif, color="#1a5276", alpha=0.15)
     ax2.plot(steps, auroc, "o--", color="#5dade2", lw=1.5, ms=4,
              label="probe AUROC, last-block labels (what the probe was fit to)")
