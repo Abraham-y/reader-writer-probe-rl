@@ -35,9 +35,15 @@ pages = subprocess.run(["pdftotext", tex + ".pdf", "-"],
 # is fine: the limit applies to body pages only. The earlier version of this
 # check assumed references always started AFTER the limit and reported a false
 # overflow when they did not.
-ref_page = next((i for i, pg in enumerate(pages) if "References" in pg), len(pages) - 1)
-# Body may end BEFORE the references page if References start at its very top.
-_head = pages[ref_page][:pages[ref_page].index("References")] if ref_page < len(pages) else ""
+# NeurIPS 2026: acknowledgments, references, checklist and appendices do not
+# count as content pages, so the body ends at whichever heading comes first.
+END = "Acknowledgments and Disclosure of Funding"
+def _end(pg):
+    hits = [pg.index(h) for h in (END, "References") if h in pg]
+    return min(hits) if hits else None
+ref_page = next((i for i, pg in enumerate(pages) if _end(pg) is not None), len(pages) - 1)
+# Body may end BEFORE that page if the heading starts at its very top.
+_head = pages[ref_page][:_end(pages[ref_page])] if ref_page < len(pages) else ""
 _has_body = bool([l for l in _head.splitlines()
                   if l.strip() and not re.fullmatch(r"[\d\s]+", l.strip())])
 body_end = ref_page + 1 if _has_body else ref_page
@@ -45,7 +51,7 @@ if body_end <= limit:
     spill = []
 else:
     over = pages[limit] if len(pages) > limit else ""
-    body = over[:over.index("References")] if "References" in over else over
+    body = over[:_end(over)] if _end(over) is not None else over
     spill = [l for l in body.splitlines()
              if l.strip() and not re.fullmatch(r"[\d\s]+", l.strip())]
 

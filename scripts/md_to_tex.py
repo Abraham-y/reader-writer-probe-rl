@@ -8,7 +8,7 @@ lets the prose live in a .md file and rebuilds the .tex from it.
 WHAT IT WILL NOT LET YOU BREAK
 The table, the preamble and the bibliography are NEVER taken from the markdown.
 They are lifted verbatim from the existing .tex every time, because the table's
-66 cells are checked against recomputed data by verify_paper_tables.py and a
+66 cells are checked against recomputed data by verify_tables.py and a
 retyped digit there is exactly the defect that check exists to catch. The
 markdown carries a {{TABLE}} marker; the real table is spliced in at build time.
 

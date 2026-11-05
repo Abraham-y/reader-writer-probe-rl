@@ -94,6 +94,58 @@ def arm_r() -> float:
     return float(roc_auc_score(y[te], s))
 
 
+def cut_at_answer(text: str) -> str:
+    """The response as RL sampled it: generation stopped at the first
+    `</answer>`, which was kept (rloo_trainer/sampling_worker.py)."""
+    j = text.find("</answer>")
+    return text if j < 0 else text[:j + len("</answer>")]
+
+
+def heldout_population(model: str = "C_outcome", evalfile: str | None = None, with_prompts: bool = False):
+    """(X, texts, first-block labels[, prompt index]) on the arms' held-out half,
+    for `model`'s headline answers read through `model`'s own hidden states."""
+    P = os.path.join(CACHE, "probe_cache_n500_clean406", f"{model}_l16_pre_answer")
+    evalfile = evalfile or {"C_outcome": "eval_c_outcome_n500.json", "C_SFT": "eval_c_sft_n500.json"}[model]
+    X = np.load(P + ".npz", allow_pickle=True)["X"]
+    meta = json.load(open(P + ".meta.json"))
+    rows = [json.loads(l) for l in open(os.path.join(_ROOT, evalfile)) if l.strip()]
+    texts, y = [], []
+    for m in meta:
+        r = rows[m["prompt_idx"]]
+        t = r["response"][m["resp_idx"]]
+        mm = _ANSWER.search(t)
+        ok = 0
+        if mm and validate_equation(mm.group(1).strip(), list(r["nums"])):
+            v = evaluate_equation(mm.group(1).strip())
+            ok = int(v is not None and abs(v - int(r["target"])) < 1e-5)
+        texts.append(t)
+        y.append(ok)
+    pid = np.array([m["prompt_idx"] for m in meta])
+    te = heldout_mask(pid)
+    out = (X[te], [texts[i] for i in np.where(te)[0]], np.array(y)[te])
+    return out + (pid[te],) if with_prompts else out
+
+
+def arm_aurocs(model: str = "C_outcome", cut: bool = True) -> dict[str, float]:
+    """Each reward's AUROC on the held-out half, read through `model`. With
+    cut=True the text is what the reward scored in training (stopped at the
+    first </answer>); with cut=False it is the evaluation answer as sampled,
+    which runs on past it. Arms A and B read that text; arm R and the reward
+    probe (arm C) read only activations at </think>, before the answer."""
+    sys.path.insert(0, ARMS)
+    import surface_residual_probe as srp  # noqa: E402
+    X, texts, y = heldout_population(model)
+    if cut:
+        texts = [cut_at_answer(t) for t in texts]
+    out = {}
+    for k, f in (("A", "probe_surface_residual_l16.pkl"), ("B", "probe_surface_only.pkl"),
+                 ("R", "probe_raw_arm_recipe.pkl")):
+        out[k] = float(roc_auc_score(y, srp.load_any(os.path.join(ARMS, f)).predict_proba(X, text=texts)[:, 1]))
+    with open(REWARD, "rb") as f:
+        out["C"] = float(roc_auc_score(y, pickle.load(f).predict_proba(X)[:, 1]))
+    return out
+
+
 def arm_ab() -> tuple[float, float]:
     """Arms A and B, recomputed from the artefacts they trained against."""
     sys.path.insert(0, ARMS)

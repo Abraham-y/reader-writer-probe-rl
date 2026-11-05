@@ -8,28 +8,35 @@ Paper: [`writeup_interpscience.pdf`](writeup_interpscience.pdf) (source [`writeu
 A linear probe on Qwen2.5-0.5B's hidden states predicts whether a Countdown answer
 will be correct (held-out AUROC 0.982). A second fit of the same kind, used as the
 RL reward, lowers true accuracy by 31 points, and the probe's own AUROC does not
-fall for 30 to 40 steps after accuracy starts to. A fixed LLM judge
-scoring the same run keeps its AUROC while accuracy falls from 54% to 23%: a
-monitor's accuracy statistics describe the monitor together with the population it
-scores, and deploying the monitor moves the population. Separately, of three rewards
-trained under one recipe, the one that read lowest as a monitor kept the most
-accuracy, and a reward built only from 39 text features drove accuracy to exactly
-zero. One seed each: these are counterexamples, not a trend.
+fall for 30 to 40 steps after accuracy starts to. A frozen LLM judge
+scoring the same run keeps its pooled AUROC while accuracy falls from 54% to 23%,
+although among well-formed answers its AUROC falls: a monitor's accuracy statistics
+describe the monitor together with the population it scores, and training against
+one monitor moves the population every monitor scores. Separately, of three rewards
+trained under one recipe, the raw probe read higher than its surface-residualised
+counterpart yet left 11.6 points less accuracy, and a reward built only from 39 text
+features drove accuracy to exactly zero. One seed each: these are counterexamples,
+not a trend.
 
 ## Reproducing the paper
 
-Every number, table and figure in the paper regenerates on CPU from 0.36 GB of
+Every number, table and figure in the paper regenerates on CPU from 0.37 GB of
 cached artifacts (activations, judge scores, rollouts), published as the Hugging
 Face dataset [`prismane16/monitor-accuracy-under-rl`](https://huggingface.co/datasets/prismane16/monitor-accuracy-under-rl), which mirrors
 this repository's paths:
 
 ```bash
-python scripts/artifacts.py fetch        # download into place, verify SHA-256
-bash scripts/check_everything.sh                         # ~15 min on a laptop
+pip install -r requirements-regenerate.txt   # CPU-only; pins scikit-learn for the pickled probes
+python scripts/artifacts.py fetch            # download into place, verify SHA-256
+bash scripts/check_everything.sh             # about 20 min on a laptop
 ```
 
 `scripts/check_everything.sh` recomputes each published value, prints it beside
-the number in the tex, and exits non-zero on any disagreement. `artifacts/MANIFEST.tsv`
+the number in the tex, and exits non-zero on any disagreement. It also fails if
+any number in the paper is not tied to a passing check (`scripts/verify_numbers.py`;
+the exceptions, with reasons, are in `scripts/number_exemptions.tsv`), if a planted
+one-digit error or swap of nearby numbers would go unnoticed (`scripts/mutation_test.py`),
+or if either figure differs from its redraw (`scripts/verify_figures.py`). `artifacts/MANIFEST.tsv`
 lists every artifact with its size and hash; `artifacts/README.md` is the
 dataset's card and says what each file is and where the paper uses it.
 
@@ -37,7 +44,7 @@ To rebuild the PDF and its figures:
 
 ```bash
 python scripts/plot_lag_from_gated.py --out figures/lag.pdf
-python scripts/plot_ladder_from_gated.py
+python scripts/plot_ladder_from_gated.py --out figures/ladder.pdf
 pdflatex writeup_interpscience.tex && pdflatex writeup_interpscience.tex
 ```
 
@@ -76,7 +83,7 @@ deployment failures, and a 5-step run caught all of them.
 | `docs/` | audits and revision notes; `docs/REVISION_PACK.md` records every corrected number and why |
 | `archive/course/` | early scratch scripts from the course project, kept for provenance |
 
-The anonymous version submitted for review is the git tag `interpscience-submission`.
+The anonymous version submitted for review is not part of this repository's public history; this repository holds the camera-ready.
 
 ## License
 
@@ -102,10 +109,10 @@ Working on Qwen2.5-0.5B (replicated at 1.5B) trained on Countdown arithmetic wit
 | A trace-final correctness probe is **near-oracle**, and outcome RL strengthens it. | Held-out AUROC `0.912 → 0.982` (0.5B); `0.974` at 1.5B; within-prompt matched-pair Wilcoxon `p < 1e-7`. |
 | The probe is **not a length detector**, though length explains a lot. | Stratified within `</think>`-position deciles it holds `0.939`, against `0.564` for position alone. |
 | Within multi-answer rollouts, the model's commit-time representation tracks the commit — **no "knows-but-doesn't-say"** at this scale. | On T→F drift rollouts, probe at the wrong-final commit = `0.154` against an F→F floor of `0.088` — a real but small residue (`+0.065`, CI `[+0.023, +0.105]`), only `8.7%` of the way from floor to the T→T level. |
-| The probe is a **reader, not a usable write-axis** on the vanilla checkpoint. | Activation-addition steering vs. matched random direction gives Δ ∈ `[-0.07, +0.02]`; no magnitude gives a positive effect, and the one interval excluding zero (α=0.5, Δ = `−0.072`) points the wrong way. |
+| *(superseded)* The probe looked like a **reader, not a usable write-axis** on the vanilla checkpoint. The paper reports no causal experiment: the steering site was misaligned (see "Withdrawn" below). | Activation-addition steering vs. matched random direction gave Δ ∈ `[-0.07, +0.02]`. |
 | As a **deployment selector** the probe is useful at zero extra inference compute — but a structural baseline captures most of it. | Best-of-16 `+11.7 pp` over a random pick of 16 on C_outcome — `88.8%` of all available headroom — of which `+8.5 pp` is available from "pick the rollout with the shortest `<think>` body" with no probe at all; the probe adds `+3.2 pp` (CI `[+0.99, +5.42]`, p = 0.008). Budgeted restart matches best-of-16 at `−60%` compute; abstention `98%` at `50%` coverage. |
 | As the **RL reward**, the probe catastrophically Goodharts in both initialisation regimes. | `runA` (init from C_outcome): delayed Goodhart, `−31.4 pp` first-block accuracy (0.550 → 0.236); `runB` (init from C_SFT): immediate Goodhart, `−22 pp`. |
-| **A monitor with no internal access reproduces the failure**, and used as the reward it destroys the task. | 7-feature text-only logistic regression, frozen on baseline: score `0.506 → 0.832` while true accuracy falls `0.517 → 0.130`. As the RL reward (pre-registered Arm B): `0.0000` accuracy, with `99.9%` of rollouts still emitting a well-formed but arithmetic-free `<answer>` block. |
+| **A monitor with no internal access reproduces the failure**, and used as the reward it destroys the task. | An early 7-feature text-only model, frozen on baseline, scored `0.506 → 0.832` while true accuracy fell `0.517 → 0.130` (not in the paper). As the RL reward, the paper's 39-feature surface model (arm B) drove accuracy to `0.0000`, with `99.9%` of rollouts still emitting a well-formed but arithmetic-free `<answer>` block. |
 | **Safe constructions** that bound or eliminate probe gradient access give either small lifts or no Goodhart — **and none beats read-only selection.** | Probe-as-baseline (LOO control variate): target-invariant, untested. Multiplicative shaping `r = verifier × probe`: `+2.84 pp` first-block, CI `[+1.85, +3.85]`, n=1 run. Probe-best-of-K in-training selection: `+1.5 pp`, halves mean blocks per rollout, n=1 run. Read-only best-of-16: `+11.7 pp`. |
 
 **Withdrawn.** An earlier version of this README claimed a mech-interp signature of Goodhart — the optimised probe direction becoming causal post-RL (Δ = `+0.083`) while a near-orthogonal control stayed null. That result does not survive checking and is retracted: the steered vector has cosine `0.163` with the probe RL actually optimised (not `1.000`) and AUROC `0.896` (not `0.982`), the steering hook sat one transformer block and 2–3 tokens downstream of the probe's read site, the key contrasts reach only p = 0.063 and p = 0.080, and the three steering runs share zero prompts. `causal_steering.py` now fixes both the layer index and the token position, so it will not reproduce the published JSONLs; use `--layer_convention legacy_block --steer_position last_token` if you need to. See `docs/REVISION_PACK.md` §A.
@@ -206,7 +213,7 @@ this before comparing against any shipped JSONL.
   transformer block downstream of the read site.
 
 ```bash
-# The vanilla null (Section 4 of the paper), at the corrected site
+# The vanilla null from an earlier draft (not in the camera-ready), at the corrected site
 python extension/probe/causal_steering.py \
     --model_path <C_outcome>  --steer_vec <C_outcome_l16_pre_answer.npz> \
     --alphas 0.0 0.5 1.0 2.0  --n_prompts 100 --n_rollouts_per_prompt 2
@@ -297,14 +304,14 @@ absent from every cached AUROC. See `docs/CODE_AUDIT.md` §C1.
 
 #### 7. Probe-as-baseline (target-invariant LOO control variate)
 
-The `--probe_baseline` flag in `rloo_trainer/rloo_update_worker.py` replaces the standard reward-mean baseline with the LOO mean of per-rollout probe values. The optimisation target remains the verifier; the probe enters only through the variance-reduction baseline. This construction is code-complete and theoretically Goodhart-free; the controlled run-time comparison against vanilla RLOO is the obvious next experiment and not in the report.
+The `--probe_baseline` flag in `rloo_trainer/rloo_update_worker.py` replaces the standard reward-mean baseline with the LOO mean of per-rollout probe values. The optimisation target remains the verifier; the probe enters only through the variance-reduction baseline. This construction is code-complete and theoretically Goodhart-free; the controlled run-time comparison against vanilla RLOO is the obvious next experiment and not in the paper.
 
 ---
 
 ### What this repository does *not* contain
 
-- Trained checkpoints, cached activations, and large eval JSONs (>5 MB). Reproduce with the scripts above.
-- The probe-as-baseline empirical results; see the report's "Failed Attempts and Null Results" section — the construction is code-complete but a controlled run-time comparison is out of scope.
+- Trained checkpoints (on the Modal volume) and cached activations (in the Hugging Face dataset above). Reproduce with the scripts above.
+- Probe-as-baseline empirical results: the construction is code-complete, but a controlled run-time comparison is out of scope.
 
 ---
 

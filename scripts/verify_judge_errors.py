@@ -14,11 +14,13 @@ Then, per checkpoint, two things: what SHARE of rollouts falls in each bucket
 step-0 threshold (its conditional behaviour).
 
 WHY IT MATTERS
-The paper claims the judge's discrimination survives a 31.7pp accuracy
-collapse because the failure is a prevalence shift, not an evaluator failure.
-This is the direct evidence: the conditional pass rates barely move while the
-population moves a great deal. AUROC is a function of the conditional score
-distributions alone, so it is blind to the second by construction.
+Section 4.2 says the judge's pooled AUROC holds through a 31.7pp accuracy
+collapse while its AUROC against well-formed wrong answers falls. These buckets
+show the mechanism: the judge passes illegal-number answers almost never, so
+as their share grows they add easy rejections that prop up the pooled AUROC,
+while its pass rate on well-formed wrong answers barely moves and its pass rate
+on correct answers drops (0.686 to 0.600 at the frozen step-0 median). The pooled
+AUROC is therefore not evidence that the judge copes with the policy's drift.
 
 It also answers the first question any reader asks -- why is the judge wrong
 at all? It checks rules, not arithmetic. It rejects illegal-number answers
@@ -40,7 +42,8 @@ SCORES = os.path.join(_ROOT, "followup", "results", "fragility", "judge_lag")
 STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
 BUCKETS = ["CORRECT", "valid form, wrong value", "wrong numbers used", "no answer given"]
 
-# Published in the paper. Any drift here fails the gate.
+# Recorded when the analysis was first run; the paper no longer prints the
+# bucket table, but it rests on it. Any drift here fails the gate.
 PUBLISHED = {
     #        share of rollouts                    judge pass rate
     #        corr   wrong-val  wrong-num          corr   wrong-val  wrong-num

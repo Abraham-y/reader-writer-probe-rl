@@ -8,7 +8,7 @@ Its step-20 value is 0.792 where the paper's table says 0.778. Both numbers are
 correct on their own terms, but the paper claims "one estimator throughout", and
 shipping a figure and a table that disagree on the same quantity is exactly the
 inconsistency a reviewer catches. So the figure is drawn here from
-changepoint_lag.json -- the file verify_paper_tables.py checks the table against
+changepoint_lag.json -- the file verify_tables.py checks the table against
 -- and it plots the interval the table prints, not an across-seed range.
 
     python scripts/plot_lag_from_gated.py --out figures/lag.pdf
@@ -19,6 +19,9 @@ import argparse, json, os
 import matplotlib
 import pandas as pd
 matplotlib.use("Agg")
+# NeurIPS asks for Type 1 or TrueType fonts; matplotlib's default is Type 3
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["ps.fonttype"] = 42
 import matplotlib.pyplot as plt
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -50,7 +53,7 @@ def main() -> None:
     # one let a reviewer read the two ladders as two different runs.
     # changepoint_lag.json records only the last-block rate (base_rate), and
     # results/ is append-only, so both rates come from the labels files that
-    # verify_paper_tables.py checks the table's accuracy columns against.
+    # verify_tables.py checks the table's accuracy columns against.
     lab = {s: pd.read_parquet(os.path.join(_ACTS, str(s), "labels.parquet")) for s in steps}
     acc_last = [float(lab[s]["last_block"].mean()) for s in steps]
     acc_first = [float(lab[s]["first_block"].mean()) for s in steps]
@@ -70,7 +73,7 @@ def main() -> None:
     ax1.plot(steps, flag, "o-", color="#c0392b", lw=1.8, ms=4,
              label="flag rate, threshold frozen at step 0 (no labels)")
     ax1.plot(steps, acc_first, "s-", color="#2c3e50", lw=1.8, ms=4,
-             label="accuracy, first block (headline rule)")
+             label="accuracy, first block (what the verifier graded)")
     ax1.plot(steps, acc_last, "s--", color="#2c3e50", lw=1.2, ms=3.5, mfc="white",
              label="accuracy, last block (the probe's label)")
     ax1.set_ylabel("rate")
@@ -108,7 +111,7 @@ def main() -> None:
 
     out = os.path.join(_ROOT, a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    fig.savefig(out, bbox_inches="tight")
+    fig.savefig(out, bbox_inches="tight", metadata={"CreationDate": None})  # byte-reproducible
     print(f"wrote {a.out} from changepoint_lag.json "
           f"(step 0 AUROC {auroc[0]:.3f}, step {BREAK_AT} {auroc[steps.index(BREAK_AT)]:.3f})")
 

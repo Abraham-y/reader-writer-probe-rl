@@ -121,3 +121,6 @@ writeup_workshop_submission.pdf
 
 # Private paper variants (same rule as writeup_workshop.md)
 writeup_workshop_full.md
+
+# The NeurIPS 2026 style file builds the paper; keep it despite the *.sty rule above.
+!neurips_2026.sty

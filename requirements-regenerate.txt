@@ -1,0 +1,13 @@
+# Everything scripts/check_everything.sh needs to regenerate the paper's numbers
+# on CPU, at the versions the suite was last verified with (2026-11). No GPU,
+# model weights or training code are needed; the cached artifacts come from
+# `python scripts/artifacts.py fetch`. The training and sampling environment is
+# modal_requirements.txt.
+numpy==2.4.2
+pandas==2.3.2
+pyarrow==24.0.0
+scipy==1.15.3
+scikit-learn==1.8.0
+matplotlib==3.10.6
+huggingface_hub==1.17.0
+pyyaml==6.0.3

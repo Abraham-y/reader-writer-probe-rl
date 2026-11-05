@@ -54,9 +54,14 @@ def _secrets() -> list[modal.Secret]:
     return [modal.Secret.from_dict(vals)] if vals else []
 
 
+# What never goes into the image. add_local_dir copies everything by default,
+# so without this a local .env (HF and W&B tokens) would be baked into every
+# image layer. Data and checkpoints come from the Modal volume, not from here.
+MODAL_IGNORE = [".env", ".env.*", "**/.env", "**/.env.*", ".git", "_attic", ".cache", "**/__pycache__"]
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .add_local_dir(str(LOCAL_ROOT), remote_path=REMOTE_ROOT, copy=True)
+    .add_local_dir(str(LOCAL_ROOT), remote_path=REMOTE_ROOT, copy=True, ignore=MODAL_IGNORE)
     .run_commands(
         f"cd {shlex.quote(REMOTE_ROOT)} && python -m pip install --upgrade "
         "pip==25.3 setuptools==80.10.2 wheel==0.46.3",

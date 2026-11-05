@@ -1,7 +1,7 @@
 """Check the numbers written in the paper's PROSE, not just its tables.
 
 WHY THIS EXISTS
-verify_paper_tables.py checks table cells. It does not read a sentence. When
+verify_tables.py checks table cells. It does not read a sentence. When
 the 2pp spotlight was rewritten from scratch, roughly twenty numbers were
 retyped into prose where nothing checked them, which is the exact failure this
 project keeps hitting: the artifacts stay right and the prose drifts off them.
@@ -24,6 +24,7 @@ for p in (_ROOT, os.path.join(_ROOT, "scripts")):
         sys.path.insert(0, p)
 from verify_judge_errors import bucket, SCORES as JS  # noqa: E402
 from evaluation.countdown import evaluate_equation     # noqa: E402
+import paper_ledger as L                                 # noqa: E402
 
 STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
 
@@ -36,10 +37,7 @@ def main() -> None:
     # Body AND appendix. Appendices sit after the bibliography, and when
     # material moves there it must not fall out of this check -- an ungated
     # region is how every number this suite exists to protect went wrong before.
-    prose = tex[tex.index(r"\begin{abstract}"):tex.index(r"\begin{thebibliography}")]
-    if "\\appendix" in tex:
-        prose += "\n" + tex[tex.index("\\appendix"):]
-    prose = re.sub(r"\\begin\{table\}.*?\\end\{table\}", " ", prose, flags=re.S)
+    prose = L.canonical(tex)   # the text verify_numbers.py checks coverage on
 
     D = {st: [json.loads(l) for l in open(f"{JS}/step_{st}.jsonl")] for st in STEPS}
     thr = float(np.quantile([r["judge_score"] for r in D[0]], 0.5))
@@ -86,16 +84,6 @@ def main() -> None:
     auroc_delta = aur[99] - aur[0]
     auroc_lo, auroc_hi = np.percentile(_dboot, [2.5, 97.5])
 
-    def _strat_p(b):
-        def rate(st, draw):
-            rows = [r for q in draw for r in _byp[st][q] if bucket(r) == b]
-            return np.mean([r["judge_score"] >= thr for r in rows]) if rows else np.nan
-        d = np.array([rate(99, dr) - rate(0, dr) for dr in _draws])
-        d = d[~np.isnan(d)]
-        return max(2 * min((d < 0).mean(), (d > 0).mean()), 1 / len(d))
-    p_corr = _strat_p("CORRECT")
-    p_ill = _strat_p("wrong numbers used")
-    p_mid = _strat_p("valid form, wrong value")
 
     # flag rate at its minimum, and the two relative falls
     _f = {st: np.mean([r["judge_score"] >= thr
@@ -149,98 +137,98 @@ def main() -> None:
     paren_yes = np.mean([a for a, _ in _pairs])
     paren_no = np.mean([b for _, b in _pairs])
 
-    # Some claims live only in the longer cut. Each entry names the papers it
-    # applies to, so dropping a sentence from one paper does not fail the other.
-    ALL = ("spotlight", "shortpaper", "interpscience")
-    LONG = ("shortpaper",)
-    SPOT = ("spotlight",)   # the corrected fixed-judge mechanism, 2pp only so far
-    # The interpscience cut carries the corrected judge mechanism and the
-    # LR+/lift material, so those checks apply to it too. Scoped one by one
-    # rather than promoted to ALL: the shorter cuts genuinely drop some.
-    LONG_I = ("shortpaper", "interpscience")
-    SPOT_I = ("spotlight", "interpscience")
-    CHECKS = [
-        # (label, recomputed, as written in the paper, tolerance, which papers)
-        ("accuracy loss, pp",        100*(y0.mean()-y9.mean()), "31.7",  0.15,  ALL),
-        ("AUROC at step 0",          aur[0],                    "0.785", 0.0015, ALL),
-        ("AUROC at step 99",         aur[99],                   "0.769", 0.0015, ALL),
-        ("largest AUROC dip",        aur[0]-min(aur.values()),  "0.031", 0.002, LONG_I),
-        # the spotlight writes these as percentages of the pool, the 3pp version
-        # as accuracies; check whichever form the paper actually uses
-        ("share correct, step 0",    100*y0.mean(),             "54.4",  0.15,  ALL),
-        ("share correct, step 99",   100*y9.mean(),             "22.6",  0.15,  ALL),
-        ("accuracy at step 40",      y4.mean(),                 "0.457", 0.0015, LONG_I),
-        ("precision at step 0",      y0[p0].mean(),             "0.746", 0.0015, ALL),
-        ("precision at step 99",     y9[p9].mean(),             "0.429", 0.0015, ALL),
-        ("LR+ at step 0",            lr(y0, p0),                "2.46",  0.01, LONG_I),
-        ("LR+ at step 99",           lr(y9, p9),                "2.57",  0.01, LONG_I),
-        ("flag rate at step 0",      p0.mean(),                 "0.500", 0.0015, ALL),
-        ("flag rate at step 99",     p9.mean(),                 "0.317", 0.0015, ALL),
-        ("flag from prevalence",     fpred,                     "0.371", 0.0015, SPOT),
-        ("prevalence share of move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 1.0, LONG_I),
-        ("lift confound share",      100*((tpr/fpred)-l0)/(l9-l0), "91",  1.0, LONG_I),
-        ("pass off by 1--3",         pr(band(1, 3)),            "52.7",  0.15,  LONG),
-        ("pass off by 50+",          pr(band(50, 1e18)),        "19.9",  0.15,  LONG),
-        ("total rollouts",           sum(len(D[s]) for s in STEPS), "35{,}728", 0, ALL),
-        ("problems",                 len({r["prompt_idx"] for r in D[0]}), "406", 0, ALL),
-        # the corrected mechanism: the flat AUROC is a cancellation
-        ("AUROC, step-99 negatives", auc_swap(0, 99),           "0.809", 0.002, LONG),
-        ("AUROC, step-99 positives", auc_swap(99, 0),           "0.737", 0.002, LONG),
-        ("pass on correct, step 0",  strat[("CORRECT", 0)],     "0.686", 0.0015, SPOT),
-        ("pass on correct, step 99", strat[("CORRECT", 99)],    "0.600", 0.0015, SPOT),
-        ("pass on illegal, step 0",  strat[("wrong numbers used", 0)],  "0.057", 0.0015, SPOT),
-        ("pass on illegal, step 99", strat[("wrong numbers used", 99)], "0.013", 0.0015, SPOT),
-        # the corrected mechanism and the alarm's own weaknesses
-        ("AUROC change, end to end", auroc_delta,              "-0.017", 0.002, ALL),
-        ("AUROC CI low",            auroc_lo,                  "-0.048", 0.004, ALL),
-        ("AUROC CI high",           auroc_hi,                  "+0.014", 0.004, ALL),
-        # not in the camera-ready; "0.013" there is an unrelated flag-rate p
-        ("p, correct stratum",      p_corr,                    "0.013", 0.006, LONG + SPOT),
-        ("p, illegal stratum",      p_ill,                     "0.004", 0.0005, LONG),
-        ("p, middle stratum",       p_mid,                     "0.74",  0.10,  LONG + SPOT),
-        ("flag rate minimum",       flag_min,                  "0.294", 0.0015, ALL),
-        ("relative accuracy fall",  rel_acc,                   "58",    1.0,   ALL),
-        ("relative flag fall",      rel_flag,                  "37",    1.0,   ALL),
-        ("illegal share of wrong, 0",  ill0,                   "28",    1.0,   ALL),
-        ("illegal share of wrong, 99", ill9,                   "43",    1.0,   ALL),
-        ("precision drop, percent", prec_drop,                 "42",    1.0,   ALL),
-        # the corrected mechanism: a fixed judge, changed inputs
-        ("repeated (prompt,eqn) keys", n_repeat,               "4{,}651", 0, SPOT_I),
-        # short counts are checked as a phrase: a bare "8" is everywhere
-        ("of those, straddling thr",   n_straddle,             "8 cross", 0, SPOT_I),
-        ("pairs at steps 0 and 99",    n_both,                 "48 pairs", 0, SPOT_I),
-        ("of those, straddling",       n_both_straddle,        "none",  None, SPOT_I),
-        ("no-paren share, step 0",     noparen0,               "0.017", 0.0015, SPOT_I),
-        ("no-paren share, step 99",    noparen99,              "0.982", 0.0015, SPOT_I),
-        ("matched: with parentheses",  paren_yes,              "0.746", 0.0015, SPOT_I),
-        ("matched: without",           paren_no,               "0.548", 0.0015, SPOT_I),
-    ]
+    # The bracket effect, with a prompt-clustered bootstrap over the matched
+    # pairs (seed 0, 2,000 draws). An earlier interval was typed in from notes.
+    _pair_list = [(k[0], np.mean(g["p"]) - np.mean(g["n"])) for k, g in _g.items() if g["p"] and g["n"]]
+    _pp = np.array([q for q, _ in _pair_list]); _dd = np.array([d for _, d in _pair_list])
+    _uq = np.unique(_pp); _rng_b = np.random.default_rng(0); _bb = []
+    for _ in range(2000):
+        _w = np.bincount(np.searchsorted(_uq, _rng_b.choice(_uq, len(_uq))), minlength=len(_uq))
+        _wt = _w[np.searchsorted(_uq, _pp)]
+        _bb.append((_wt * _dd).sum() / _wt.sum())
+    paren_lo, paren_hi = np.percentile(_bb, [2.5, 97.5])
 
-    which = ("spotlight" if "spotlight" in a.tex
-             else "interpscience" if "interpscience" in a.tex else "shortpaper")
-    bad = 0
-    print(f"  {'quantity':<26}{'recomputed':>12}{'in paper':>11}   status")
-    for label, got, written, tol, applies in CHECKS:
-        if which not in applies:
-            continue
-        if tol is None:            # a count written as a word
-            want = {"none": 0, "one": 1}[written]
-            ok = got == want and re.search(r"\b" + written + r"\b", prose) is not None
-            print(f"  {label:<26}{got:>12.0f}{written:>11}   {'OK' if ok else 'CHECK'}")
-            bad += 0 if ok else 1
-            continue
-        want = float(written.split()[0].replace("{,}", "").replace(",", "").lstrip("+"))
-        num_ok = abs(got - want) <= tol
-        # is it actually written down? skip the presence test for values that
-        # legitimately appear only inside the table (none here, but be explicit)
-        # Exact match: the number must appear as itself, not inside another
-        # number. A bare substring test passed "0.74" on 0.746 and "28" on 28.6.
-        in_paper = re.search(r"(?<![\d.])" + re.escape(written) + r"(?![\d])", prose) is not None
-        status = "OK" if (num_ok and in_paper) else (
-            "VALUE DRIFTED" if not num_ok else "NOT IN PROSE")
-        if status != "OK":
-            bad += 1
-        print(f"  {label:<26}{got:>12.3f}{written:>11}   {status}")
+    # (label, recomputed, as written, tolerance, context). Every check names the
+    # sentence it belongs to: {n} is the number, the rest pins it in place, so
+    # the same digits elsewhere cannot satisfy it (the 2026-10-10 mutation test
+    # passed 23 planted errors through bare-number checks).
+    CHECKS = [
+        ("accuracy loss, pp",           100*(y0.mean()-y9.mean()), "31.7",  0.15,  r"a drop of {n} points"),
+        ("abstract: judge-ladder accuracy, step 0 (%)", 100*y0.mean(), "54", 0.5, r"accuracy falls from {n}\\% to 23\\%"),
+        ("abstract: judge-ladder accuracy, step 99 (%)", 100*y9.mean(), "23", 0.5, r"falls from 54\\% to {n}\\%"),
+        ("relative accuracy fall",      rel_acc,                   "58",    0.5,   r"points, or {n}\\%"),
+        ("judge AUROC at step 0",       aur[0],                    "0.785", 0.0015, r"It is {n} at step 0"),
+        ("judge AUROC at step 0, Table 1", aur[0],                 "0.785", 0.0015, r"its {n} is on"),
+        ("judge AUROC at step 99",      aur[99],                   "0.769", 0.0015, r"and {n} at step 99"),
+        ("judge AUROC dip",             aur[30]-aur[0],            "-0.031", 0.0015, r"a dip of {n} at step 30"),
+        ("judge AUROC at step 50",      aur[50],                   "0.778", 0.0015, r"at step 50 it is {n}"),
+        ("accuracy at step 0",          y0.mean(),                 "0.544", 0.0015, r"true accuracy of {n}"),
+        ("accuracy, steps 0 to 40",     y4.mean(),                 "0.457", 0.0015, r"falls 0\.544 \\to {n}"),
+        ("accuracy at step 0 (dip)",    y0.mean(),                 "0.544", 0.0015, r"falls {n} \\to 0\.457"),
+        ("accuracy, steps 0 to 99",     y9.mean(),                 "0.226", 0.0015, r"fell 0\.544 \\to {n}"),
+        ("accuracy at step 0 (end)",    y0.mean(),                 "0.544", 0.0015, r"fell {n} \\to 0\.226"),
+        ("correct share, step 0",       y0.mean(),                 "0.544", 0.0015, r"answers falls {n} \\to 0\.226"),
+        ("correct share, step 99",      y9.mean(),                 "0.226", 0.0015, r"answers falls 0\.544 \\to {n}"),
+        ("precision at step 0",         y0[p0].mean(),             "0.746", 0.0015, r"precision {n} at its own"),
+        ("precision fall, from",        y0[p0].mean(),             "0.746", 0.0015, r"\({n} \\to 0\.429\)"),
+        ("precision at step 99",        y9[p9].mean(),             "0.429", 0.0015, r"\(0\.746 \\to {n}\)"),
+        ("precision drop, percent",     prec_drop,                 "42",    0.5,   r"by {n}\\% \(0\.746"),
+        ("LR+ at step 0",               lr(y0, p0),                "2.46",  0.005, r"\({n} \\to 2\.57, ratio"),
+        ("LR+ at step 99",              lr(y9, p9),                "2.57",  0.005, r"2\.46 \\to {n}, ratio"),
+        ("TPR at step 0",               tpr,                       "0.686", 0.0015, r"TPR\} {n} \\to"),
+        ("TPR at step 99",              p9[y9 == 1].mean(),        "0.600", 0.0015, r"TPR\} 0\.686 \\to {n}"),
+        ("FPR at step 0",               fpr,                       "0.279", 0.0015, r"FPR\} {n} \\to 0\.234"),
+        ("FPR at step 99",              p9[y9 == 0].mean(),        "0.234", 0.0015, r"FPR\} 0\.279 \\to {n}"),
+        ("judge flag rate, 0 to 99",    p0.mean(),                 "0.500", 0.0015, r"decreases rather than increases, {n} \\to 0\.317"),
+        ("judge flag rate at step 99",  p9.mean(),                 "0.317", 0.0015, r"increases, 0\.500 \\to {n}"),
+        ("judge flag rate minimum",     flag_min,                  "0.294", 0.0015, r"minimum of {n} at step 80"),
+        ("prevalence share of flag move", 100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 0.5, r"predicts about {n}\\% of it"),
+        ("prevalence share (App B)",    100*(fpred-p0.mean())/(p9.mean()-p0.mean()), "70", 0.5, r"roughly {n}\\% of the flag"),
+        ("lift confound share",         100*((tpr/fpred)-l0)/(l9-l0), "91", 0.5, r"{n}\\% of lift's"),
+        ("judge answers in total",      sum(len(D[st]) for st in STEPS), "35{,}728", 0, r"{n} answers in total"),
+        ("judge answers, App A",        sum(len(D[st]) for st in STEPS), "35{,}728", 0, r"Two of the {n} answers"),
+        ("AUROC change, end to end",    auroc_delta,               "-0.017", 0.0015, r"\({n}, 95\\% CI \[-0\.048"),
+        ("AUROC change CI low",         auroc_lo,                  "-0.048", 0.0015, r"95\\% CI \[{n}, \+0\.014\]"),
+        ("AUROC change CI high",        auroc_hi,                  "+0.014", 0.0015, r"\[-0\.048, {n}\]\), though"),
+        ("repeated (problem, eqn) pairs", n_repeat,                "4{,}651", 0, r"it scored {n} \(problem, equation\)"),
+        ("repeated pairs, App A",       n_repeat,                  "4{,}651", 0, r"Of the {n} repeated pairs"),
+        ("of those, straddling",        n_straddle,                "8",     0,     r"; {n} cross the threshold"),
+        ("straddlers' distance from it", max_straddle_gap,         "3",     None,  r"all within {n}\\times10\^\{-4\} of it"),
+        ("pairs at steps 0 and 99",     n_both,                    "48",    0,     r"of the {n} pairs scored at both"),
+        ("repeats identical every time (%)", 100*np.mean([max(v) == min(v) for v in _rep]), "79", 0.5, r"{n}\\% score identically every time"),
+        ("repeats differing by more than 0.01", sum(max(v) - min(v) > 0.01 for v in _rep), "109", 0, r"and {n} differ by more than 0\.01"),
+        ("largest difference between repeats", max(max(v) - min(v) for v in _rep), "0.109", 0.0005, r"the largest by {n}\."),
+        ("no-paren share, step 0",      noparen0,                  "0.017", 0.0015, r"none rising {n} \\to"),
+        ("no-paren share, step 99",     noparen99,                 "0.982", 0.0015, r"rising 0\.017 \\to {n}"),
+        ("bracketed forms passed",      paren_yes,                 "0.746", 0.0015, r"passes {n} of the bracketed"),
+        ("bare forms passed",           paren_no,                  "0.548", 0.0015, r"and {n} of the bare"),
+        ("bracket effect",              paren_yes - paren_no,      "+0.198", 0.0015, r"\({n}, 95\\% CI \[\+0\.1"),
+        ("bracket effect CI low",       paren_lo,                  "+0.127", 0.0015, r"95\\% CI \[{n}, \+0\.2\d\d\]\)\. The judge"),
+        ("bracket effect CI high",      paren_hi,                  "+0.266", 0.0015, r"\[\+0\.1\d\d, {n}\]\)\. The judge"),
+    ]
+    # the one count written as a word
+    word_ok = n_both_straddle == 0 and re.search(r"48 pairs scored at both step 0 and step 99, none do", prose) is not None
+    L.claim("pairs at steps 0 and 99 that cross: none", r"of the 48 pairs scored at both step 0 and step 99, none do", word_ok)
+    # the straddlers all sit within 3e-4 of the threshold
+    gap_ok = max_straddle_gap < 3e-4
+
+    bad = 0 if word_ok else 1
+    print(f"  {'quantity':<32}{'recomputed':>12}{'in paper':>11}   status")
+    for label, got, written, tol, ctx in CHECKS:
+        pat = ctx.replace("{n}", L.number_pattern(written))
+        in_paper = re.search(pat, prose) is not None
+        if tol is None:                       # the straddle gap, an upper bound
+            num_ok = gap_ok
+        else:
+            want = float(written.replace("{,}", "").replace(",", "").lstrip("+"))
+            w_ = written.replace("{,}", "").lstrip("+-")
+            tol = min(tol, 0.5 * 10 ** -(len(w_.split(".")[1]) if "." in w_ else 0) + 1e-9)   # exact rounding
+            num_ok = abs(got - want) <= tol
+        L.claim(label, pat, num_ok and in_paper)
+        status = "OK" if (num_ok and in_paper) else ("VALUE DRIFTED" if not num_ok else "NOT IN PAPER")
+        bad += status != "OK"
+        print(f"  {label:<32}{got:>12.4f}{written:>11}   {status}")
+    L.dump("verify_prose_numbers")
     print()
     print("  every number written in the prose matches the data." if not bad
           else f"  {bad} PROBLEMS -- do not submit until this is green.")

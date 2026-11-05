@@ -1,0 +1,13 @@
+# Numbers in the paper that no data in this repository can regenerate, each with its reason.
+# Format: <regex over paper_ledger.canonical text><TAB><reason>. Keep this list short and specific:
+# every entry is a number the gates do not verify.
+fall from 0\.31 to 0\.09 while still passing 55\\%	cited result (Zhou 2026, Table 2), checked against the paper text by hand
+cosine 0\.163 with the probe actually optimised, not the 1\.000 the claim assumed	withdrawn steering result, outside the regeneration scope by design
+one transformer block and 2--3 tokens downstream	withdrawn steering result
+reach only p=0\.063 and p=0\.080	withdrawn steering result (docs/REVISION_PACK.md)
+Qwen2\.5-0\.5B	model name
+first committed to git on 12 August 2026	date of commit a73042f; a clean-room archive has no git history to check it against
+All RL experiments are at 0\.5B, so how	model size (Qwen2.5-0.5B)
+p vs\.\\ 0 (?:&|\\\\)	column label: p-values against step 0
+so 0\.5 is chance	definition of AUROC chance level
+across steps 0 and 99, it passes	names the two checkpoints the bracket comparison uses; the comparison itself is gated

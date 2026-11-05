@@ -18,7 +18,7 @@ Abraham Yeung and Anagha Ramaswamy, Stanford University.
 Interpretability as a Science (InterpScience) Workshop, NeurIPS 2026.
 Code and paper: <https://github.com/Abraham-y/reader-writer-probe-rl>
 
-These are the 65 files (0.36 GB) that the paper's regeneration script reads. With
+These are the 68 files (0.37 GB) that the paper's regeneration script reads. With
 them, every number, table and figure in the paper regenerates on CPU, and the
 script exits non-zero if any published value disagrees with its recomputation.
 The list is not hand-picked: it was built by logging every file the script
@@ -59,6 +59,8 @@ last `<answer>` block an answer contains, with the exact Countdown verifier.
 | `extension/cache/probe_cache_n500_clean406/*` | activations (`.npz`) and first-block labels (`.meta.json`) for C_outcome's and C_SFT's headline-protocol answers (16 per prompt, temperature 0.6) | §3, the AUROC column of Table 2, and the rewards' AUROCs read through C_SFT (§4.3) |
 | `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer_temp1.pkl` | the reward probe: a scikit-learn `StandardScaler` + `LogisticRegression` pipeline | the RL reward; scored in §4.1 |
 | `eval_c_outcome_temp1_asingh_300.json` | the reward probe's fitting data: 8 temperature-1 answers to each of 300 prompts from the RL training pool | the check that none of those prompts is among the 406 (§3) |
+| `extension/cache/probe_cache_temp1/C_outcome_temp1_l16_pre_answer.{npz,meta.json}` | the activations those answers produce at the reward probe's read site | the reward probe's own held-out AUROC, 0.810, refit exactly as it was fit (§3, Table 1) |
+| `extension/cache/steering/probe_pipeline_temp1_meta.json` | the reward probe's fit record: checkpoint, layer, position, label rule, sampling, 300 prompts × 8 rollouts | Table 1(a)'s reward-probe row |
 | `extension/cache/steering/probe_pipeline_C_outcome_l16_pre_answer.pkl` | the trace-final probe (AUROC 0.982) | its cosines with the reward probe and with arm R's probe (§3) |
 | `followup/experiments/fragility/residual_probe/probe_surface_only.pkl` | arm B's reward, the 39-feature surface model | its weights and AUROCs (§4.3, Table 2) |
 | `followup/experiments/fragility/residual_probe/probe_surface_residual_l16.pkl` | arm A's reward: the surface-residualised probe `LR(h - s B)` | its AUROC (Table 2), its split into an activation term and a text term, and its AUROC read through C_SFT (§4.3) |
