@@ -124,3 +124,7 @@ writeup_workshop_full.md
 
 # The NeurIPS 2026 style file builds the paper; keep it despite the *.sty rule above.
 !neurips_2026.sty
+
+# Internal planning notes, kept locally (untracked 2026-11-12)
+docs/ASSESSMENT.md
+docs/STATUS_2026-08-14.md

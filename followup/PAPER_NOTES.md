@@ -3,8 +3,6 @@
 One paragraph per figure-worthy result, the day it is produced: claim, evidence,
 caveats. Append-only.
 
-Target: NeurIPS 2026 interp/safety workshop (fallback), ICLR 2027 main (stretch).
-
 **Metric conventions.** AUROC is recorded in two variants: unbalanced (all val
 rows) and balanced (positive/negative subsampled to equal size, seed-dependent).
 They are different numbers and must not be mixed inside one table. Every table

@@ -7,7 +7,7 @@ behavioural. **This project asks what happens mechanistically, and whether
 monitor robustness is predictable in advance.**
 
 Plan and conventions: `CLAUDE.md`. Critique of that plan, and what was changed:
-`ASSESSMENT.md`. Results as they land: `PAPER_NOTES.md`.
+`docs/archive/followup_ASSESSMENT.md`. Results as they land: `PAPER_NOTES.md`.
 
 ## Layout
 
@@ -94,7 +94,7 @@ modal run --detach modal_fragility.py patching -- --config phase2_default.yaml -
 | **H2 corruption** | collapses | also collapses | the information itself degraded |
 | **H0 confound** | collapses | recovers | the probe scored a writing style that RL decoupled from correctness |
 
-H0 is not in `CLAUDE.md` and is the leading hypothesis; see `ASSESSMENT.md` §2.
+H0 is not in `CLAUDE.md` and is the leading hypothesis; see `docs/archive/followup_ASSESSMENT.md` §2.
 H0 and H1 share the Phase-1 signature (large positive `evasion_gap`), so the
 headline figure does not decide between them. What decides it:
 `auroc_frozen_cond_template` (Phase 1) and Δ-template-under-steering (Phase 2).
