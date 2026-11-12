@@ -77,9 +77,10 @@ def main() -> None:
     ax1.plot(steps, acc_last, "s--", color="#2c3e50", lw=1.2, ms=3.5, mfc="white",
              label="accuracy, last block (the probe's label)")
     ax1.set_ylabel("rate")
-    # Upper left is the one empty region now that two accuracy lines run through
-    # the right half (the old centre-right box hid first-block accuracy at 50-60).
-    ax1.legend(fontsize=7, loc="upper left", framealpha=0.9)
+    # The band between the flag rate (near 1) and the accuracies (below 0.32) from
+    # step 60 on is the one empty region: upper left hid the flag rate at 40-60,
+    # and centred right hid first-block accuracy at 50-60.
+    ax1.legend(fontsize=6.5, loc="center right", bbox_to_anchor=(0.995, 0.6), framealpha=0.9)
     ax1.set_ylim(0, 1.05)
 
     pf = json.load(open(_SRC_FIRST))["per_step"]

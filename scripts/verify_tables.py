@@ -384,7 +384,7 @@ def main() -> None:
     clear = min(s_ for s_ in (20, 30, 40) if att[s_] > band + 15)      # by a wide margin
     lead = (min(on_f, on_l) - clear, max(on_f, on_l) - edge)
     assert_phrase("lead over the AUROC against the benign band: 0 to 20 steps", lead == (0, 20) and (edge, clear) == (30, 40) and att[30] - band < 5,
-                  r"leads the AUROC by 0 to 20 steps rather than 30 to 40", text)
+                  r"narrowly, and clearly at step 40, so it leads the AUROC by 0 to 20 steps rather than 30 to 40", text)
     assert_phrase("contribution 2: the same lead against the benign band", lead == (0, 20) and (edge, clear) == (30, 40),
                   r"before the AUROC falls \(0 to 20 against our imperfect benign band\)", text)
     okf = ok and flag_on == 10

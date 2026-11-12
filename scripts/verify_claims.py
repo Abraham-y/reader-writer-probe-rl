@@ -187,7 +187,7 @@ def main() -> None:
     phrase("C_outcome: 100 RLOO steps (section 2)", c["num_training_steps"] == 100, r"C_\{\\text\{outcome\}\} is 100 RLOO steps against the verifier", text)
     phrase("arms: 100 RLOO steps (Figure 2, Table 2)", all(snap[k]["num_training_steps"] == 100 for k in ("arm A", "arm B", "arm R")),
            r"after 100 RLOO steps against it", text)
-    phrase("arms: accuracy at step 100 (Table 2, section 4.3)", aA["num_training_steps"] == 100, r"first-block at step 100, all four", text)
+    phrase("arms: accuracy at step 100 (Table 2, section 4.3)", aA["num_training_steps"] == 100, r"first-block after 100 updates, all four", text)
     phrase("pre-registration: accuracy at step 100", aA["num_training_steps"] == 100, r"first-block accuracy at step 100 with the published", text)
     rpm = [snap[k]["final_logged_train_probe_mean"] for k in ("runA", "runB")]
     phrase("both runs end training at a probe score of about 0.99", all(abs(x - 0.99) < 0.005 for x in rpm),
@@ -201,7 +201,7 @@ def main() -> None:
     yml16 = "layer: 16" in open(os.path.join(_ROOT, "followup/configs/fragility/phase0_harvest_runA.yaml")).read()
     phrase("verifier rewards {0, 0.1, 1.0}", cs_def["format_score"].default == 0.1 and cs_def["score"].default == 1.0, r"The verifier returns \\\{0, 0\.1, 1\.0\\\}", text)
     phrase("layer 16 (Appendix C)", sbd["layer"] == 16 and yml16, r"logistic regression at layer 16\.", text)
-    phrase("layer 16 (Appendix D)", sbd["layer"] == 16 and yml16, r"Layer 16 was fixed in advance", text)
+    phrase("layer 16 (Appendix D)", sbd["layer"] == 16 and yml16, r"Layer 16 was fixed before any experiment reported here", text)
     phrase("5-fold GroupKFold", "GroupKFold(5)" in sb_src and "GroupKFold(5)" in fit_src, r"scored by 5-fold", text)
     phrase("checkpoints start at step 0", os.path.isdir(os.path.join(_ROOT, "followup/acts/phase0_harvest_runA/0")), r"distribution at step 0\.", text)
 
